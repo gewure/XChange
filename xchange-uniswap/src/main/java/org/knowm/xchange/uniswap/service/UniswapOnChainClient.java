@@ -36,6 +36,7 @@ public class UniswapOnChainClient {
   private final Web3j web3j;
   private final NonceManager nonceManager;
   private final FlashbotsClient flashbotsClient;
+  private final long chainId;
 
   public UniswapOnChainClient(UniswapExchange exchange) {
     String rpcUri = exchange.getExchangeSpecification().getSslUri();
@@ -49,6 +50,12 @@ public class UniswapOnChainClient {
         this.flashbotsClient = new FlashbotsClient(relayUri, relayKey);
     } else {
         this.flashbotsClient = null;
+    }
+    
+    try {
+        this.chainId = web3j.ethChainId().send().getChainId().longValue();
+    } catch (IOException e) {
+        throw new RuntimeException("Failed to fetch Chain ID", e);
     }
   }
 
@@ -164,7 +171,7 @@ public class UniswapOnChainClient {
       // Calculate maxFeePerGas = (2 * baseFee) + priorityFee
       java.math.BigInteger maxFeePerGas = baseFeePerGas.multiply(new java.math.BigInteger("2")).add(maxPriorityFeePerGas);
       
-      long chainId = web3j.ethChainId().send().getChainId().longValue();
+      // Use cached chainId
 
       // Create EIP-1559 Transaction (Type 2)
       // Correct signature: createTransaction(long chainId, BigInteger nonce, BigInteger gasLimit, String to, BigInteger value, String data, BigInteger maxPriorityFeePerGas, BigInteger maxFeePerGas)

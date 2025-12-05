@@ -101,6 +101,7 @@ public class UniswapTradeService implements TradeService {
         tokenOut = baseIsToken0 ? token0 : token1;
     } else {
         // Selling Base for Quote
+        tokenIn = baseIsToken0 ? token0 : token1;
         tokenOut = baseIsToken0 ? token1 : token0;
     }
     
