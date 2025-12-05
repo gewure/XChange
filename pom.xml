@@ -50,6 +50,7 @@
         <module>xchange-bitget-futures</module>
         <module>xchange-bithumb</module>
         <module>xchange-bitmex</module>
+        <module>xchange-bitpanda</module>
         <module>xchange-bitso</module>
         <module>xchange-bitstamp</module>
         <module>xchange-bity</module>
@@ -114,6 +115,7 @@
         <module>xchange-stream-bitflyer</module>
         <module>xchange-stream-bitget</module>
         <module>xchange-stream-bitmex</module>
+        <module>xchange-stream-bitpanda</module>
         <module>xchange-stream-bitstamp</module>
         <module>xchange-stream-btcmarkets</module>
         <module>xchange-stream-bybit</module>
