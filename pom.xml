@@ -144,10 +144,12 @@
         <module>xchange-stream-service-pubnub</module>
         <module>xchange-tradeogre</module>
         <module>xchange-truefx</module>
+        <module>xchange-uniswap</module>
         <module>xchange-upbit</module>
         <module>xchange-vaultoro</module>
         <module>xchange-yobit</module>
         <module>xchange-zaif</module>
+        <module>xchange-stream-uniswap</module>
     </modules>
 
     <scm>
