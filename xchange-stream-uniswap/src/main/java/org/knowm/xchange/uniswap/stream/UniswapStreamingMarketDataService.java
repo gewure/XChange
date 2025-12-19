@@ -51,7 +51,11 @@ public class UniswapStreamingMarketDataService implements StreamingMarketDataSer
     );
     filter.addSingleTopic("0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67");
 
-    return io.reactivex.rxjava3.core.Flowable.<org.web3j.protocol.core.methods.response.Log>fromPublisher(service.getWeb3j().ethLogFlowable(filter)).toObservable()
+    // Bridge RxJava 2 Flowable (from Web3j 4.10.0) to RxJava 3 Observable
+    io.reactivex.Flowable<org.web3j.protocol.core.methods.response.Log> rx2Flowable = service.getWeb3j().ethLogFlowable(filter);
+
+    // Using simple From/To Publisher conversion via Reactive Streams interface
+    return io.reactivex.rxjava3.core.Flowable.fromPublisher(rx2Flowable).toObservable()
         .flatMap(log -> {
             try {
                 // Decode log data

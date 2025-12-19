@@ -34,13 +34,15 @@ import java.util.List;
 public class UniswapOnChainClient {
 
   private final Web3j web3j;
+  private final org.web3j.protocol.Web3jService service;
   private final NonceManager nonceManager;
   private final FlashbotsClient flashbotsClient;
   private final long chainId;
 
   public UniswapOnChainClient(UniswapExchange exchange) {
     String rpcUri = exchange.getExchangeSpecification().getSslUri();
-    this.web3j = Web3j.build(new HttpService(rpcUri));
+    this.service = new HttpService(rpcUri);
+    this.web3j = Web3j.build(this.service);
     this.nonceManager = new NonceManager(web3j);
     
     String relayUri = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem(org.knowm.xchange.uniswap.UniswapExchangeSpecification.FLASHBOTS_RELAY_URI);
@@ -162,7 +164,14 @@ public class UniswapOnChainClient {
       }
 
       // EIP-1559 Gas Strategy
-      java.math.BigInteger maxPriorityFeePerGas = web3j.ethMaxPriorityFeePerGas().send().getMaxPriorityFeePerGas();
+      org.web3j.protocol.core.Request<?, org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas> request =
+          new org.web3j.protocol.core.Request<>(
+              "eth_maxPriorityFeePerGas",
+              java.util.Collections.emptyList(),
+              this.service,
+              org.web3j.protocol.core.methods.response.EthMaxPriorityFeePerGas.class
+          );
+      java.math.BigInteger maxPriorityFeePerGas = request.send().getMaxPriorityFeePerGas();
       
       // Fetch latest block to get baseFee
       org.web3j.protocol.core.methods.response.EthBlock ethBlock = web3j.ethGetBlockByNumber(org.web3j.protocol.core.DefaultBlockParameterName.LATEST, false).send();
