@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.knowm.xchange.currency.Currency;
 import org.knowm.xchange.currency.CurrencyPair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.knowm.xchange.derivative.FuturesContract;
 import org.knowm.xchange.derivative.OptionsContract;
 import org.knowm.xchange.dto.Order;
@@ -74,6 +76,8 @@ import org.knowm.xchange.okex.dto.trade.OkexOrderType;
 
 /** Author: Max Gao (gaamox@tutanota.com) Created: 08-06-2021 */
 public class OkexAdapters {
+
+  private static final Logger LOG = LoggerFactory.getLogger(OkexAdapters.class);
 
   private static final String TRADING_WALLET_ID = "trading";
   private static final String FOUNDING_WALLET_ID = "founding";
@@ -513,6 +517,9 @@ public class OkexAdapters {
       if (pair instanceof FuturesContract
           && ((FuturesContract) pair).isPerpetual()
           && !pair.getCounter().equals(Currency.USDT)) {
+        LOG.warn(
+            "Skipping instrument {} because of volume conversion issue for Swap contracts with USD/USDC counter currency.",
+            instrument.getInstrumentId());
         continue;
       }
       instrumentMetaData.put(
