@@ -52,6 +52,8 @@ public class GeminiExchange extends BaseExchange {
     exchangeSpecification.setExchangeDescription("Gemini is a bitcoin exchange.");
 
     exchangeSpecification.setExchangeSpecificParametersItem(Exchange.USE_SANDBOX, false);
+    exchangeSpecification.getResilience().setRateLimiterEnabled(true);
+    exchangeSpecification.getResilience().setRetryEnabled(true);
 
     return exchangeSpecification;
   }

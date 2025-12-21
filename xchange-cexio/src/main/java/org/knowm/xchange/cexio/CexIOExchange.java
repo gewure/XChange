@@ -13,13 +13,14 @@ import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.meta.InstrumentMetaData;
 import org.knowm.xchange.exceptions.ExchangeException;
 import org.knowm.xchange.instrument.Instrument;
-import org.knowm.xchange.utils.nonce.AtomicLongIncrementalTime2014NonceFactory;
+import org.knowm.xchange.utils.nonce.CurrentTimeIncrementalNonceFactory;
+import java.util.concurrent.TimeUnit;
 import si.mazi.rescu.SynchronizedValueFactory;
 
 public class CexIOExchange extends BaseExchange implements Exchange {
 
   private SynchronizedValueFactory<Long> nonceFactory =
-      new AtomicLongIncrementalTime2014NonceFactory();
+      new CurrentTimeIncrementalNonceFactory(TimeUnit.MILLISECONDS);
 
   @Override
   protected void initServices() {

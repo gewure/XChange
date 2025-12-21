@@ -32,6 +32,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import javax.crypto.Mac;
+import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.github.resilience4j.ratelimiter.RateLimiterConfig;
+import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
 import org.apache.commons.lang3.StringUtils;
 import org.knowm.xchange.bitfinex.service.BitfinexAdapters;
 import org.knowm.xchange.bitfinex.v1.BitfinexDigest;
@@ -89,9 +92,19 @@ public class BitfinexStreamingService extends JsonNettyStreamingService {
   private final BlockingQueue<String> calculationQueue = new LinkedBlockingQueue<>();
   private Disposable calculator;
 
+  private final RateLimiter subscriptionRateLimiter;
+
   public BitfinexStreamingService(String apiUrl, SynchronizedValueFactory<Long> nonceFactory) {
     super(apiUrl, Integer.MAX_VALUE, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_RETRY_DURATION, 30);
     this.nonceFactory = nonceFactory;
+
+    // Limit to 20 subscriptions per second (approx) to be safe with Bitfinex limits
+    RateLimiterConfig config = RateLimiterConfig.custom()
+            .limitRefreshPeriod(Duration.ofSeconds(1))
+            .limitForPeriod(20)
+            .timeoutDuration(Duration.ofMillis(5000))
+            .build();
+    this.subscriptionRateLimiter = RateLimiterRegistry.of(config).rateLimiter("subscriptionRateLimiter");
   }
 
   public BitfinexStreamingService(
@@ -103,6 +116,14 @@ public class BitfinexStreamingService extends JsonNettyStreamingService {
       int idleTimeoutSeconds) {
     super(apiUrl, maxFramePayloadLength, connectionTimeout, retryDuration, idleTimeoutSeconds);
     this.nonceFactory = nonceFactory;
+
+    // Limit to 20 subscriptions per second (approx) to be safe with Bitfinex limits
+    RateLimiterConfig config = RateLimiterConfig.custom()
+            .limitRefreshPeriod(Duration.ofSeconds(1))
+            .limitForPeriod(20)
+            .timeoutDuration(Duration.ofMillis(5000))
+            .build();
+    this.subscriptionRateLimiter = RateLimiterRegistry.of(config).rateLimiter("subscriptionRateLimiter");
   }
 
   @Override
@@ -292,6 +313,11 @@ public class BitfinexStreamingService extends JsonNettyStreamingService {
 
   @Override
   public String getSubscribeMessage(String channelName, Object... args) throws IOException {
+    // Acquire permission from rate limiter before generating subscription message
+    if (subscriptionRateLimiter != null) {
+        subscriptionRateLimiter.acquirePermission();
+    }
+
     BitfinexWebSocketSubscriptionMessage subscribeMessage = null;
     if (args.length == 1) {
       subscribeMessage = new BitfinexWebSocketSubscriptionMessage(channelName, (String) args[0]);

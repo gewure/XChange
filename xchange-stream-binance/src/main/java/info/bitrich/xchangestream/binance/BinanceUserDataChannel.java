@@ -51,8 +51,8 @@ class BinanceUserDataChannel implements AutoCloseable {
     this.apiKey = apiKey;
     this.onApiCall = onApiCall;
     openChannel();
-    // Send a keepalive every 30 minutes as recommended by Binance
-    this.keepAlive = Observable.interval(30, TimeUnit.MINUTES).subscribe(x -> keepAlive());
+    // Send a keepalive every 29 minutes to be safe (Binance recommends 30, but network latency etc.)
+    this.keepAlive = Observable.interval(29, TimeUnit.MINUTES).subscribe(x -> keepAlive());
   }
 
   /**
