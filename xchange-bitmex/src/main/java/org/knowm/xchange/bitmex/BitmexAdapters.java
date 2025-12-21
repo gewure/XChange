@@ -7,6 +7,7 @@ import java.time.ZonedDateTime;
 import java.time.chrono.ChronoZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -134,7 +135,12 @@ public class BitmexAdapters {
             .map(BitmexAdapters::toLimitOrder)
             .collect(Collectors.groupingBy(Order::getType));
 
-    return new OrderBook(null, orders.get(OrderType.ASK), orders.get(OrderType.BID));
+    List<LimitOrder> asks = orders.get(OrderType.ASK);
+    List<LimitOrder> bids = orders.get(OrderType.BID);
+    return new OrderBook(
+        null,
+        asks == null ? Collections.emptyList() : asks,
+        bids == null ? Collections.emptyList() : bids);
   }
 
   public Trades adaptTrades(List<BitmexPublicTrade> trades, CurrencyPair currencyPair) {

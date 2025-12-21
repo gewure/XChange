@@ -38,9 +38,21 @@ public class HuobiExchange extends BaseExchange implements Exchange {
   public void remoteInit() throws IOException, ExchangeException {
     HuobiAssetPair[] assetPairs =
         ((HuobiMarketDataServiceRaw) marketDataService).getHuobiAssetPairs();
+    if (assetPairs == null) {
+      assetPairs = new HuobiAssetPair[0];
+    }
+
     HuobiAsset[] assets = ((HuobiMarketDataServiceRaw) marketDataService).getHuobiAssets();
+    if (assets == null) {
+      assets = new HuobiAsset[0];
+    }
+
     HuobiCurrencyWrapper[] huobiCurrencies =
         ((HuobiMarketDataServiceRaw) marketDataService).getHuobiCurrencies("");
+    if (huobiCurrencies == null) {
+      huobiCurrencies = new HuobiCurrencyWrapper[0];
+    }
+
     exchangeMetaData =
         HuobiAdapters.adaptToExchangeMetaData(
             assetPairs, assets, exchangeMetaData, huobiCurrencies);
