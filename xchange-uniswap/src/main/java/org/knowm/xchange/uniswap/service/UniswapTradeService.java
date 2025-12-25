@@ -20,8 +20,12 @@ public class UniswapTradeService implements TradeService {
   private final UniswapOnChainClient onChainClient;
 
   public UniswapTradeService(UniswapExchange exchange) {
+    this(exchange, new UniswapOnChainClient(exchange));
+  }
+
+  public UniswapTradeService(UniswapExchange exchange, UniswapOnChainClient onChainClient) {
     this.exchange = exchange;
-    this.onChainClient = new UniswapOnChainClient(exchange);
+    this.onChainClient = onChainClient;
   }
 
   @Override
@@ -114,7 +118,6 @@ public class UniswapTradeService implements TradeService {
     // Or we strictly support "Sell 1 BTC" (ASK).
     // Let's assume amount is Input Amount for now.
     
-    // TODO: Fetch decimals for tokenIn
     int decimalsIn = onChainClient.getDecimals(tokenIn);
     amountIn = marketOrder.getOriginalAmount().multiply(java.math.BigDecimal.TEN.pow(decimalsIn)).toBigInteger();
     
