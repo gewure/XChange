@@ -1,6 +1,7 @@
 package org.knowm.xchange.gateio.service;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -70,18 +71,19 @@ public class GateioTradeService extends GateioTradeServiceRaw implements TradeSe
 
   @Override
   public Collection<Order> getOrder(OrderQueryParams... orderQueryParams) throws IOException {
-    // todo: implement getting of several orders
-    Validate.validState(orderQueryParams.length == 1);
-    Validate.isInstanceOf(OrderQueryParamInstrument.class, orderQueryParams[0]);
+    List<Order> orders = new ArrayList<>();
+    for (OrderQueryParams orderQueryParam : orderQueryParams) {
+      Validate.isInstanceOf(OrderQueryParamInstrument.class, orderQueryParam);
+      OrderQueryParamInstrument params = (OrderQueryParamInstrument) orderQueryParam;
 
-    OrderQueryParamInstrument params = (OrderQueryParamInstrument) orderQueryParams[0];
-
-    try {
-      GateioOrder gateioOrder = getOrder(params.getOrderId(), params.getInstrument());
-      return Collections.singletonList(GateioAdapters.toOrder(gateioOrder));
-    } catch (GateioException e) {
-      throw GateioErrorAdapter.adapt(e);
+      try {
+        GateioOrder gateioOrder = getOrder(params.getOrderId(), params.getInstrument());
+        orders.add(GateioAdapters.toOrder(gateioOrder));
+      } catch (GateioException e) {
+        throw GateioErrorAdapter.adapt(e);
+      }
     }
+    return orders;
   }
 
   public Order cancelOrder(String orderId, Instrument instrument) throws IOException {
