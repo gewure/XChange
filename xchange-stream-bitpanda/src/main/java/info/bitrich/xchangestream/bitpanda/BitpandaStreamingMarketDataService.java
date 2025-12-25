@@ -29,16 +29,6 @@ public class BitpandaStreamingMarketDataService implements StreamingMarketDataSe
                 .subscribeChannel(channelName)
                 .map(
                         node -> {
-                            // TODO: Verify exact message structure
-                            // Assuming:
-                            // {
-                            // "instrument_code": "BTC_EUR",
-                            // "last_price": "...",
-                            // "high": "...",
-                            // "low": "...",
-                            // "volume": "..."
-                            // }
-
                             // Depending on the structure, we might need to navigate to "data" field
                             JsonNode data = node;
                             if (node.has("data")) {
@@ -48,16 +38,15 @@ public class BitpandaStreamingMarketDataService implements StreamingMarketDataSe
                             BigDecimal last = new BigDecimal(data.get("last_price").asText());
                             BigDecimal high = new BigDecimal(data.get("high").asText());
                             BigDecimal low = new BigDecimal(data.get("low").asText());
-                            BigDecimal volume = new BigDecimal(data.get("volume").asText());
+                            BigDecimal volume = new BigDecimal(data.get("base_volume").asText());
 
-                            // Bid/Ask might be in a different message or field
                             BigDecimal bid = last; // Placeholder
                             BigDecimal ask = last; // Placeholder
-                            if (data.has("best_bid")) {
-                                bid = new BigDecimal(data.get("best_bid").asText());
+                            if (data.has("highest_bid")) {
+                                bid = new BigDecimal(data.get("highest_bid").asText());
                             }
-                            if (data.has("best_ask")) {
-                                ask = new BigDecimal(data.get("best_ask").asText());
+                            if (data.has("lowest_ask")) {
+                                ask = new BigDecimal(data.get("lowest_ask").asText());
                             }
 
                             return new Ticker.Builder()

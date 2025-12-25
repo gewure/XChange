@@ -34,9 +34,9 @@ public class BitpandaStreamingMarketDataServiceTest {
                 + "\"last_price\": \"10000.0\","
                 + "\"high\": \"10100.0\","
                 + "\"low\": \"9900.0\","
-                + "\"volume\": \"5.0\","
-                + "\"best_bid\": \"9999.0\","
-                + "\"best_ask\": \"10001.0\""
+                + "\"base_volume\": \"5.0\","
+                + "\"highest_bid\": \"9999.0\","
+                + "\"lowest_ask\": \"10001.0\""
                 + "}";
         JsonNode node = mapper.readTree(json);
 
