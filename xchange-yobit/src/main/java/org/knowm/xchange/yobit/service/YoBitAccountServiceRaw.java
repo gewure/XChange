@@ -89,8 +89,11 @@ public abstract class YoBitAccountServiceRaw extends YoBitBaseService<YoBit>
   }
 
   public BaseYoBitResponse getDepositAddress(Currency currency) throws IOException {
-    boolean needNew = false; // todo: implement this option
+    return getDepositAddress(currency, false);
+  }
 
+  public BaseYoBitResponse getDepositAddress(Currency currency, boolean needNew)
+      throws IOException {
     return service.getDepositAddress(
         exchange.getExchangeSpecification().getApiKey(),
         signatureCreator,

@@ -43,7 +43,12 @@ public class YoBitAccountService extends YoBitAccountServiceRaw {
 
   @Override
   public String requestDepositAddress(Currency currency, String... args) throws IOException {
-    BaseYoBitResponse response = getDepositAddress(currency);
+    boolean needNew = false;
+    if (args != null && args.length > 0) {
+      needNew = Boolean.valueOf(args[0]);
+    }
+
+    BaseYoBitResponse response = getDepositAddress(currency, needNew);
 
     if (!response.success) throw new ExchangeException("failed to withdraw funds");
 
