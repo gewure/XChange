@@ -150,6 +150,7 @@
         <module>xchange-vaultoro</module>
         <module>xchange-yobit</module>
         <module>xchange-zaif</module>
+        <module>faast-tests</module>
     </modules>
 
     <scm>
