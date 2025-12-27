@@ -215,14 +215,15 @@ public class CexIOArchivedOrder {
         // market orders don't have a price
         if (map.containsKey("price")) orderPrice = new BigDecimal(map.get("price"));
 
-        int priceScale = 8; // todo: check if this is correct for all
+        // 16 decimal places should be enough for any price/amount
+        int calculationScale = 16;
         BigDecimal counterAmount = filled.get(counter);
         BigDecimal baseAmount = filled.get(base);
 
         BigDecimal averageExecutionPrice = null;
         if (baseAmount != null && baseAmount.compareTo(BigDecimal.ZERO) > 0)
           averageExecutionPrice =
-              counterAmount.divide(baseAmount, priceScale, RoundingMode.HALF_UP);
+              counterAmount.divide(baseAmount, calculationScale, RoundingMode.HALF_UP);
 
         BigDecimal amount = new BigDecimal(map.get("amount"));
 
@@ -232,7 +233,7 @@ public class CexIOArchivedOrder {
           // of the base ccy
           BigDecimal amount2 = new BigDecimal(map.get("amount2"));
 
-          amount = amount2.divide(averageExecutionPrice, 8, RoundingMode.HALF_UP);
+          amount = amount2.divide(averageExecutionPrice, calculationScale, RoundingMode.HALF_UP);
         }
 
         return new CexIOArchivedOrder(
