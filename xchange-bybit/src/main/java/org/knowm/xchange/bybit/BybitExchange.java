@@ -120,16 +120,13 @@ public class BybitExchange extends BaseExchange implements Exchange {
 
   @Override
   public void applySpecification(ExchangeSpecification exchangeSpecification) {
-    if (exchangeSpecification
-        .getExchangeSpecificParametersItem(Exchange.USE_SANDBOX)
-        .equals(true)) {
+    if (Boolean.TRUE.equals(
+        exchangeSpecification.getExchangeSpecificParametersItem(Exchange.USE_SANDBOX))) {
       exchangeSpecification.setSslUri(DEMO_URL);
     }
 
-    if (exchangeSpecification.getExchangeSpecificParametersItem(SPECIFIC_PARAM_TESTNET) != null
-        && exchangeSpecification
-            .getExchangeSpecificParametersItem(SPECIFIC_PARAM_TESTNET)
-            .equals(true)) {
+    if (Boolean.TRUE.equals(
+        exchangeSpecification.getExchangeSpecificParametersItem(SPECIFIC_PARAM_TESTNET))) {
       exchangeSpecification.setSslUri(TESTNET_URL);
     }
     super.applySpecification(exchangeSpecification);
