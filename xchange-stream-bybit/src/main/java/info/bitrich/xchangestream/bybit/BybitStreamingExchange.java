@@ -78,11 +78,14 @@ public class BybitStreamingExchange extends BybitExchange implements StreamingEx
     } else {
       apiUrl = URI;
     }
-    apiUrl +=
-        "/"
-            + ((BybitCategory)
-                    exchangeSpecification.getExchangeSpecificParametersItem(EXCHANGE_TYPE))
-                .getValue();
+
+    BybitCategory category =
+        (BybitCategory) exchangeSpecification.getExchangeSpecificParametersItem(EXCHANGE_TYPE);
+    if (category == null) {
+      category = BybitCategory.SPOT;
+    }
+
+    apiUrl += "/" + category.getValue();
     return apiUrl;
   }
 

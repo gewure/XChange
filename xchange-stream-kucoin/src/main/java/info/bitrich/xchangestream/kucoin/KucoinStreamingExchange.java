@@ -31,7 +31,8 @@ public class KucoinStreamingExchange extends KucoinExchange implements Streaming
 
   @Override
   public Completable connect(ProductSubscription... args) {
-    ProductSubscription subscriptions = args[0];
+    ProductSubscription subscriptions =
+        args.length == 0 ? ProductSubscription.create().build() : args[0];
 
     Completable complete = Completable.complete();
     services.clear();

@@ -36,8 +36,12 @@ public class BybitStreamingService extends JsonNettyStreamingService {
 
     public BybitStreamingService(String apiUrl, ExchangeSpecification spec) {
         super(apiUrl);
-        this.exchange_type =
-                ((BybitCategory) spec.getExchangeSpecificParametersItem(EXCHANGE_TYPE)).getValue();
+        BybitCategory category =
+                (BybitCategory) spec.getExchangeSpecificParametersItem(EXCHANGE_TYPE);
+        if (category == null) {
+            category = BybitCategory.SPOT;
+        }
+        this.exchange_type = category.getValue();
         this.spec = spec;
         //    this.setEnableLoggingHandler(true);
     }
