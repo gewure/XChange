@@ -24,20 +24,25 @@ public class UniswapAccountService implements AccountService {
   @Override
   public AccountInfo getAccountInfo() throws IOException {
     String walletAddress = exchange.getExchangeSpecification().getApiKey(); // Use ApiKey field for wallet address? Or custom?
-    // User request said: "Wallet address (required)" in ExchangeSpecification.
-    // Let's check UniswapExchangeSpecification if we have a getter for wallet address.
-    // We don't have it yet. Let's assume we use ApiKey for now or add it to spec.
-    // Standard XChange practice: ApiKey is often used for public key / wallet address.
     
     if (walletAddress == null || walletAddress.isEmpty()) {
-       // Fallback to custom property if ApiKey not set
-       // But let's stick to ApiKey for simplicity or check custom prop.
-       // Actually, let's use a custom property in UniswapExchangeSpecification.
        walletAddress = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem("wallet_address");
     }
     
-    if (walletAddress == null) {
-      throw new IllegalArgumentException("Wallet address not provided");
+    if (walletAddress == null || walletAddress.isEmpty()) {
+        String privateKey = exchange.getExchangeSpecification().getSecretKey();
+        if (privateKey == null || privateKey.isEmpty()) {
+            privateKey = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem("private_key");
+        }
+        if (privateKey != null && !privateKey.isEmpty()) {
+            try {
+                walletAddress = org.web3j.crypto.Credentials.create(privateKey).getAddress();
+            } catch (Exception ignored) {}
+        }
+    }
+     
+    if (walletAddress == null || walletAddress.isEmpty()) {
+       throw new IllegalArgumentException("Wallet address not provided");
     }
 
     BigInteger balanceWei = onChainClient.getBalance(walletAddress);

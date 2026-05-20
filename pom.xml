@@ -36,6 +36,7 @@
     </developers>
 
     <modules>
+        <module>faast-tests</module>
         <module>xchange-ascendex</module>
         <module>xchange-bibox</module>
         <module>xchange-binance</module>
@@ -150,7 +151,6 @@
         <module>xchange-vaultoro</module>
         <module>xchange-yobit</module>
         <module>xchange-zaif</module>
-        <module>faast-tests</module>
     </modules>
 
     <scm>
@@ -461,7 +461,6 @@
                     </execution>
                 </executions>
             </plugin>
-            <!-- Ensure compilation is done under Java 8 in all environments -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -470,6 +469,13 @@
                     <release>${version.java}</release>
                     <showDeprecation>true</showDeprecation>
                     <showWarnings>true</showWarnings>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${version.lombok}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
 

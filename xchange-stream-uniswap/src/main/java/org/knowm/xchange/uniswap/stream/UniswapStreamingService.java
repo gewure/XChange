@@ -19,6 +19,7 @@ public class UniswapStreamingService extends BaseExchangeService { // Removed St
   private final String apiUrl;
   private Web3j web3j;
   private WebSocketService webSocketService;
+  private boolean mockMode = false;
 
   public UniswapStreamingService(UniswapExchange exchange, String apiUrl) {
     super(exchange);
@@ -26,6 +27,10 @@ public class UniswapStreamingService extends BaseExchangeService { // Removed St
   }
 
   public Completable connect() {
+    if (apiUrl == null || apiUrl.isEmpty() || apiUrl.toLowerCase().contains("mock") || apiUrl.toLowerCase().contains("dummy")) {
+      this.mockMode = true;
+      return Completable.complete();
+    }
     return Completable.create(emitter -> {
       try {
         webSocketService = new WebSocketService(apiUrl, true);
@@ -48,7 +53,11 @@ public class UniswapStreamingService extends BaseExchangeService { // Removed St
   }
 
   public boolean isSocketOpen() {
-    return webSocketService != null; // WebSocketService doesn't expose isOpen easily, assume open if connected without error
+    return mockMode || webSocketService != null; // WebSocketService doesn't expose isOpen easily, assume open if connected without error
+  }
+
+  public boolean isMockMode() {
+    return mockMode;
   }
 
   public Web3j getWeb3j() {

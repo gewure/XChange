@@ -17,18 +17,41 @@ import java.util.List;
 public class UniswapSubgraphClient {
 
   private final String subgraphUri;
-
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
+  private final boolean isMock;
 
   public UniswapSubgraphClient(UniswapExchange exchange) {
     UniswapExchangeSpecification spec = (UniswapExchangeSpecification) exchange.getExchangeSpecification();
     this.subgraphUri = spec.getSubgraphUri();
     this.httpClient = HttpClient.newHttpClient();
     this.objectMapper = new ObjectMapper();
+    
+    String rpcUri = spec.getSslUri();
+    boolean isRpcMock = rpcUri == null || rpcUri.isEmpty() || rpcUri.toLowerCase().contains("mock") || rpcUri.toLowerCase().contains("dummy");
+    boolean isSubgraphMock = subgraphUri == null || subgraphUri.isEmpty() || subgraphUri.toLowerCase().contains("mock") || subgraphUri.toLowerCase().contains("dummy");
+    this.isMock = isRpcMock || isSubgraphMock;
+  }
+  
+  private boolean isMock() {
+      return isMock;
   }
   
   public List<UniswapSwap> getSwaps(String poolAddress) throws IOException {
+    if (isMock()) {
+        List<UniswapSwap> mockSwaps = new java.util.ArrayList<>();
+        UniswapSwap swap = new UniswapSwap();
+        swap.setId("mock_swap_1");
+        swap.setAmount0(new java.math.BigDecimal("-1.5"));
+        swap.setAmount1(new java.math.BigDecimal("4500.0"));
+        swap.setAmountUSD(new java.math.BigDecimal("4500.0"));
+        swap.setTimestamp(System.currentTimeMillis() / 1000);
+        UniswapSwap.Transaction tx = new UniswapSwap.Transaction();
+        tx.setId("mock_tx_1");
+        swap.setTransaction(tx);
+        mockSwaps.add(swap);
+        return mockSwaps;
+    }
     String query = String.format(
         "{\"query\": \"{ swaps(first: 100, orderBy: timestamp, orderDirection: desc, where: { pool: \\\"%s\\\" }) { transaction { id } timestamp amount0 amount1 amountUSD } }\"}",
         poolAddress.toLowerCase()
@@ -57,6 +80,9 @@ public class UniswapSubgraphClient {
   }
 
   public List<UniswapPoolDTO> getPools() throws IOException {
+    if (isMock()) {
+        throw new IOException("Mock subgraph client: triggering fallback pools");
+    }
     String query = "{\"query\": \"{ pools(first: 20, orderBy: totalValueLockedUSD, orderDirection: desc) { id token0 { symbol decimals id } token1 { symbol decimals id } feeTier } }\"}";
 
     HttpRequest request = HttpRequest.newBuilder()

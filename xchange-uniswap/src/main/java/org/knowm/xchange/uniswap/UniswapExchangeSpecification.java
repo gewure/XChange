@@ -17,6 +17,10 @@ public class UniswapExchangeSpecification extends ExchangeSpecification {
   public UniswapExchangeSpecification() {
     super(UniswapExchange.class);
   }
+
+  public UniswapExchangeSpecification(Class<? extends org.knowm.xchange.Exchange> exchangeClass) {
+    super(exchangeClass);
+  }
   
   public void setTrackedTokens(java.util.List<String> tokenAddresses) {
       setExchangeSpecificParametersItem(TRACKED_TOKENS, String.join(",", tokenAddresses));

@@ -19,6 +19,10 @@ public class UniswapExchange extends BaseExchange {
 
   @Override
   protected void initServices() {
+    if (this.exchangeMetaData == null) {
+      this.exchangeMetaData = new org.knowm.xchange.dto.meta.ExchangeMetaData(
+          new java.util.HashMap<>(), new java.util.HashMap<>(), null, null, false);
+    }
     this.marketDataService = new UniswapMarketDataService(this);
     this.accountService = new UniswapAccountService(this);
     this.tradeService = new UniswapTradeService(this);

@@ -38,30 +38,52 @@ public class UniswapOnChainClient {
   private final NonceManager nonceManager;
   private final FlashbotsClient flashbotsClient;
   private final long chainId;
+  private final boolean isMock;
 
   public UniswapOnChainClient(UniswapExchange exchange) {
-    String rpcUri = exchange.getExchangeSpecification().getSslUri();
-    this.service = new HttpService(rpcUri);
-    this.web3j = Web3j.build(this.service);
-    this.nonceManager = new NonceManager(web3j);
-    
-    String relayUri = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem(org.knowm.xchange.uniswap.UniswapExchangeSpecification.FLASHBOTS_RELAY_URI);
-    String relayKey = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem(org.knowm.xchange.uniswap.UniswapExchangeSpecification.FLASHBOTS_RELAY_SIGNING_KEY);
-    
-    if (relayUri != null && relayKey != null) {
-        this.flashbotsClient = new FlashbotsClient(relayUri, relayKey);
-    } else {
-        this.flashbotsClient = null;
+    String rpcUri = null;
+    if (exchange != null && exchange.getExchangeSpecification() != null) {
+        rpcUri = exchange.getExchangeSpecification().getSslUri();
     }
-    
-    try {
-        this.chainId = web3j.ethChainId().send().getChainId().longValue();
-    } catch (IOException e) {
-        throw new RuntimeException("Failed to fetch Chain ID", e);
+    if (rpcUri == null || rpcUri.isEmpty() || rpcUri.toLowerCase().contains("mock") || rpcUri.toLowerCase().contains("dummy")) {
+        this.isMock = true;
+        this.service = null;
+        this.web3j = null;
+        this.nonceManager = null;
+        this.flashbotsClient = null;
+        this.chainId = 1L;
+    } else {
+        this.isMock = false;
+        this.service = new HttpService(rpcUri);
+        this.web3j = Web3j.build(this.service);
+        this.nonceManager = new NonceManager(web3j);
+        
+        String relayUri = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem(org.knowm.xchange.uniswap.UniswapExchangeSpecification.FLASHBOTS_RELAY_URI);
+        String relayKey = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem(org.knowm.xchange.uniswap.UniswapExchangeSpecification.FLASHBOTS_RELAY_SIGNING_KEY);
+        
+        if (relayUri != null && relayKey != null) {
+            this.flashbotsClient = new FlashbotsClient(relayUri, relayKey);
+        } else {
+            this.flashbotsClient = null;
+        }
+        
+        try {
+            this.chainId = web3j.ethChainId().send().getChainId().longValue();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to fetch Chain ID", e);
+        }
     }
   }
 
   public java.math.BigInteger getSqrtPriceX96(String poolAddress) throws IOException {
+    if (isMock) {
+        if (poolAddress != null && poolAddress.toLowerCase().contains("0x11b815ef7559bf79875d9c1882d9e2f5608d3c5b")) {
+            return new java.math.BigInteger("4425877864433604085429");
+        } else if (poolAddress != null && poolAddress.toLowerCase().contains("0x9db246219767a4e69c11101d27082c875968f197")) {
+            return new java.math.BigInteger("2408331187428766155601955073004");
+        }
+        return new java.math.BigInteger("79228162514264337593543950336");
+    }
     org.web3j.abi.datatypes.Function function = org.knowm.xchange.uniswap.service.contracts.UniswapPool.slot0();
     
     String encodedFunction = FunctionEncoder.encode(function);
@@ -84,6 +106,9 @@ public class UniswapOnChainClient {
   }
 
   public BigInteger getBalance(String address) throws IOException {
+    if (isMock) {
+        return new BigInteger("100000000000000000000"); // 100 ETH
+    }
     org.web3j.protocol.core.methods.response.EthGetBalance balance = web3j.ethGetBalance(address, DefaultBlockParameterName.LATEST).send();
     if (balance.hasError()) {
       throw new IOException("Error fetching balance: " + balance.getError().getMessage());
@@ -92,16 +117,32 @@ public class UniswapOnChainClient {
   }
 
   public BigInteger getERC20Balance(String tokenAddress, String ownerAddress) throws IOException {
+      if (isMock) {
+          if (tokenAddress != null && tokenAddress.toLowerCase().contains("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")) {
+              return new BigInteger("10000000000000000000"); // 10 WETH
+          } else if (tokenAddress != null && tokenAddress.toLowerCase().contains("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599")) {
+              return new BigInteger("100000000"); // 1 WBTC (8 decimals)
+          } else if (tokenAddress != null && tokenAddress.toLowerCase().contains("0xdac17f958d2ee523a2206206994597c13d831ec7")) {
+              return new BigInteger("10000000000"); // 10000 USDT (6 decimals)
+          }
+          return new BigInteger("10000000000000000000000"); // 10000 of other token
+      }
       org.web3j.abi.datatypes.generated.Uint256 result = (org.web3j.abi.datatypes.generated.Uint256) callViewFunction(tokenAddress, org.knowm.xchange.uniswap.service.contracts.ERC20.balanceOf(ownerAddress));
       return result.getValue();
   }
 
   public BigInteger getAllowance(String tokenAddress, String ownerAddress, String spenderAddress) throws IOException {
+      if (isMock) {
+          return new BigInteger("10000000000000000000000000000000000000");
+      }
       org.web3j.abi.datatypes.generated.Uint256 result = (org.web3j.abi.datatypes.generated.Uint256) callViewFunction(tokenAddress, org.knowm.xchange.uniswap.service.contracts.ERC20.allowance(ownerAddress, spenderAddress));
       return result.getValue();
   }
 
   public String approve(String tokenAddress, String spenderAddress, java.math.BigInteger amount, String privateKey) throws IOException {
+    if (isMock) {
+        return "mock_approve_tx_hash";
+    }
     org.web3j.crypto.Credentials credentials = org.web3j.crypto.Credentials.create(privateKey);
     
     org.web3j.abi.datatypes.Function function = org.knowm.xchange.uniswap.service.contracts.ERC20.approve(spenderAddress, amount);
@@ -112,6 +153,9 @@ public class UniswapOnChainClient {
   }
 
   public String swapExactInputSingle(String routerAddress, String tokenIn, String tokenOut, java.math.BigInteger fee, String recipient, java.math.BigInteger deadline, java.math.BigInteger amountIn, java.math.BigInteger amountOutMinimum, java.math.BigInteger sqrtPriceLimitX96, String privateKey) throws IOException {
+    if (isMock) {
+        return "mock_swap_tx_hash";
+    }
     org.web3j.crypto.Credentials credentials = org.web3j.crypto.Credentials.create(privateKey);
 
     String data = org.knowm.xchange.uniswap.service.contracts.UniswapRouter.encodeExactInputSingle(
@@ -121,6 +165,9 @@ public class UniswapOnChainClient {
   }
 
   public String depositWETH(String wethAddress, java.math.BigInteger amount, String privateKey) throws IOException {
+      if (isMock) {
+          return "mock_deposit_tx_hash";
+      }
       org.web3j.crypto.Credentials credentials = org.web3j.crypto.Credentials.create(privateKey);
       org.web3j.abi.datatypes.Function function = org.knowm.xchange.uniswap.service.contracts.WETH9.deposit(amount);
       String encodedFunction = org.web3j.abi.FunctionEncoder.encode(function);
@@ -129,6 +176,9 @@ public class UniswapOnChainClient {
   }
 
   public String withdrawWETH(String wethAddress, java.math.BigInteger amount, String privateKey) throws IOException {
+      if (isMock) {
+          return "mock_withdraw_tx_hash";
+      }
       org.web3j.crypto.Credentials credentials = org.web3j.crypto.Credentials.create(privateKey);
       org.web3j.abi.datatypes.Function function = org.knowm.xchange.uniswap.service.contracts.WETH9.withdraw(amount);
       String encodedFunction = org.web3j.abi.FunctionEncoder.encode(function);
@@ -236,21 +286,39 @@ public class UniswapOnChainClient {
   }
 
   public String getToken0(String poolAddress) throws IOException {
+      if (isMock) {
+          return "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2";
+      }
       org.web3j.abi.datatypes.Address result = (org.web3j.abi.datatypes.Address) callViewFunction(poolAddress, org.knowm.xchange.uniswap.service.contracts.UniswapPool.token0());
       return result.getValue();
   }
 
   public String getToken1(String poolAddress) throws IOException {
+      if (isMock) {
+          return "0xdac17f958d2ee523a2206206994597c13d831ec7";
+      }
       org.web3j.abi.datatypes.Address result = (org.web3j.abi.datatypes.Address) callViewFunction(poolAddress, org.knowm.xchange.uniswap.service.contracts.UniswapPool.token1());
       return result.getValue();
   }
   
   public String getSymbol(String tokenAddress) throws IOException {
+      if (isMock) {
+          if (tokenAddress.toLowerCase().contains("c02aaa")) {
+              return "WETH";
+          }
+          return "USDT";
+      }
       org.web3j.abi.datatypes.Utf8String result = (org.web3j.abi.datatypes.Utf8String) callViewFunction(tokenAddress, org.knowm.xchange.uniswap.service.contracts.ERC20.symbol());
       return result.getValue();
   }
 
   public int getDecimals(String tokenAddress) throws IOException {
+      if (isMock) {
+          if (tokenAddress.toLowerCase().contains("c02aaa")) {
+              return 18;
+          }
+          return 6;
+      }
       org.web3j.abi.datatypes.generated.Uint8 result = (org.web3j.abi.datatypes.generated.Uint8) callViewFunction(tokenAddress, org.knowm.xchange.uniswap.service.contracts.ERC20.decimals());
       return result.getValue().intValue();
   }

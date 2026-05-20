@@ -23,6 +23,15 @@ public class UniswapStreamingExchange extends UniswapExchange implements Streami
   }
 
   @Override
+  public ExchangeSpecification getDefaultExchangeSpecification() {
+    UniswapStreamingExchangeSpecification spec = new UniswapStreamingExchangeSpecification();
+    spec.setExchangeName("Uniswap");
+    spec.setExchangeDescription("Uniswap V3 DEX on EVM Chains (Streaming)");
+    spec.setNetwork(org.knowm.xchange.uniswap.config.UniswapNetwork.ETHEREUM);
+    return spec;
+  }
+
+  @Override
   public Completable connect(ProductSubscription... args) {
     if (streamingService == null) {
       ExchangeSpecification spec = getExchangeSpecification();

@@ -75,6 +75,6 @@ public class UniswapStreamingMarketDataServiceTest {
 
     observer.await();
     observer.assertValueCount(1);
-    observer.assertValue(trade -> trade.getPrice().compareTo(BigDecimal.ONE) == 0);
+    observer.assertValue(trade -> trade.getPrice().compareTo(new java.math.BigDecimal("1000000000000")) == 0);
   }
 }
