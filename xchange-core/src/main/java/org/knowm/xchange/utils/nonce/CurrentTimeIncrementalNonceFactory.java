@@ -24,10 +24,10 @@ public class CurrentTimeIncrementalNonceFactory implements SynchronizedValueFact
   public CurrentTimeIncrementalNonceFactory(final TimeUnit timeUnit) {
     switch (timeUnit) {
       case SECONDS:
-        timeFn = () -> System.currentTimeMillis() / 1000;
+        timeFn = () -> (System.currentTimeMillis() + org.knowm.xchange.utils.DateUtils.getOffset()) / 1000;
         break;
       case MILLISECONDS:
-        timeFn = System::currentTimeMillis;
+        timeFn = () -> System.currentTimeMillis() + org.knowm.xchange.utils.DateUtils.getOffset();
         break;
       case MICROSECONDS:
         timeFn = () -> System.nanoTime() / 1000;

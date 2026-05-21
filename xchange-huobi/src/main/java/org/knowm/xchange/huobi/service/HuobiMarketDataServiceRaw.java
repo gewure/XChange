@@ -66,7 +66,7 @@ public class HuobiMarketDataServiceRaw extends HuobiBaseService {
   public HuobiCurrencyWrapper[] getHuobiCurrencies(String currency) throws IOException {
     HuobiCurrenciesResult currenciesResult =
         huobi.getCurrencies(
-            currency.toLowerCase(),
+            currency == null ? null : currency.toLowerCase(),
             false,
             exchange.getExchangeSpecification().getApiKey(),
             HuobiDigest.HMAC_SHA_256,

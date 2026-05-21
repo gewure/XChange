@@ -83,23 +83,52 @@ public class BybitUserTradeStreamingService extends JsonNettyStreamingService {
             });
   }
 
+  private String sign(String message) {
+    String secretKeyStr = spec.getSecretKey();
+    if (secretKeyStr.contains("PRIVATE KEY")) {
+        try {
+            String privateKeyPEM = secretKeyStr
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replace("-----BEGIN RSA PRIVATE KEY-----", "")
+                .replace("-----END RSA PRIVATE KEY-----", "")
+                .replaceAll("\\s", "");
+            byte[] encoded = java.util.Base64.getDecoder().decode(privateKeyPEM);
+            java.security.spec.PKCS8EncodedKeySpec keySpec = new java.security.spec.PKCS8EncodedKeySpec(encoded);
+            java.security.KeyFactory kf = java.security.KeyFactory.getInstance("RSA");
+            java.security.PrivateKey privateKey = kf.generatePrivate(keySpec);
+
+            java.security.Signature signature = java.security.Signature.getInstance("SHA256withRSA");
+            signature.initSign(privateKey);
+            signature.update(message.getBytes(StandardCharsets.UTF_8));
+            byte[] signed = signature.sign();
+            return java.util.Base64.getEncoder().encodeToString(signed);
+        } catch (Exception e) {
+            throw new ExchangeException("Failed to sign using RSA private key", e);
+        }
+    } else {
+        try {
+            Mac mac = Mac.getInstance(BaseParamsDigest.HMAC_SHA_256);
+            final javax.crypto.SecretKey secretKey =
+                new javax.crypto.spec.SecretKeySpec(
+                    secretKeyStr.getBytes(StandardCharsets.UTF_8), BaseParamsDigest.HMAC_SHA_256);
+            mac.init(secretKey);
+            return bytesToHex(mac.doFinal(message.getBytes(StandardCharsets.UTF_8)));
+        } catch (Exception e) {
+            throw new ExchangeException("Invalid API secret", e);
+        }
+    }
+  }
+
   private void login() {
     String key = spec.getApiKey();
     long expires = Instant.now().toEpochMilli() + 10000;
     String _val = "GET/realtime" + expires;
     try {
-      Mac mac = Mac.getInstance(BaseParamsDigest.HMAC_SHA_256);
-      final SecretKey secretKey =
-          new SecretKeySpec(
-              spec.getSecretKey().getBytes(StandardCharsets.UTF_8), BaseParamsDigest.HMAC_SHA_256);
-      mac.init(secretKey);
-      String signature = bytesToHex(mac.doFinal(_val.getBytes(StandardCharsets.UTF_8)));
-      List<String> args =
-          Stream.of(key, String.valueOf(expires), signature).collect(Collectors.toList());
+      String signature = sign(_val);
+      List<Object> args = List.of(key, expires, signature);
       String message = objectMapper.writeValueAsString(new BybitSubscribeMessage("auth", args));
       this.sendMessage(message);
-    } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-      throw new ExchangeException("Invalid API secret", e);
     } catch (JsonProcessingException e) {
       throw new RuntimeException(e);
     }

@@ -9,6 +9,6 @@ public class BybitTimeStampFactory implements SynchronizedValueFactory<Long> {
 
   @Override
   public Long createValue() {
-    return System.currentTimeMillis();
+    return System.currentTimeMillis() + org.knowm.xchange.utils.DateUtils.getOffset();
   }
 }

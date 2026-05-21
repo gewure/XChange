@@ -37,10 +37,11 @@ public class UniswapTradeService implements TradeService {
   }
 
   private String executeSwap(Order order, java.math.BigDecimal limitPrice) throws IOException {
-    if (!(order.getInstrument() instanceof UniswapInstrument)) {
-      throw new IllegalArgumentException("Instrument must be UniswapInstrument");
+    org.knowm.xchange.instrument.Instrument resolved = resolveInstrument(order.getInstrument());
+    if (!(resolved instanceof UniswapInstrument)) {
+      throw new IllegalArgumentException("Instrument must be UniswapInstrument: " + order.getInstrument());
     }
-    UniswapInstrument instrument = (UniswapInstrument) order.getInstrument();
+    UniswapInstrument instrument = (UniswapInstrument) resolved;
     
     // We need private key to sign.
     String privateKey = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem("private_key");
@@ -62,11 +63,13 @@ public class UniswapTradeService implements TradeService {
     String symbol1 = onChainClient.getSymbol(token1);
     
     boolean baseIsToken0 = false;
-    if (instrument.getBase().getCurrencyCode().equals("ETH")) {
-         if ("WETH".equals(symbol0) || "WMATIC".equals(symbol0)) {
+    String canonicalBase = canonical(instrument.getBase().getCurrencyCode());
+    String canonicalSymbol0 = canonical(symbol0);
+    if (canonicalBase.equals("ETH")) {
+         if ("ETH".equals(canonicalSymbol0) || "WMATIC".equals(canonicalSymbol0)) {
              baseIsToken0 = true;
          }
-    } else if (instrument.getBase().getCurrencyCode().equals(symbol0)) {
+    } else if (canonicalBase.equals(canonicalSymbol0)) {
         baseIsToken0 = true;
     }
     
@@ -154,5 +157,33 @@ public class UniswapTradeService implements TradeService {
     java.math.BigDecimal q96 = new java.math.BigDecimal(new java.math.BigInteger("2").pow(96));
     java.math.BigDecimal sqrtPrice = new java.math.BigDecimal(sqrtPriceX96).divide(q96, java.math.MathContext.DECIMAL128);
     return sqrtPrice.pow(2, java.math.MathContext.DECIMAL128);
+  }
+
+  private String canonical(String symbol) {
+    if (symbol == null) return null;
+    String upper = symbol.toUpperCase();
+    if ("WBTC".equals(upper) || "WETH".equals(upper) || "WMATIC".equals(upper)) {
+      if ("WBTC".equals(upper)) return "BTC";
+      if ("WETH".equals(upper)) return "ETH";
+    }
+    if ("USDC".equals(upper) || "BUSD".equals(upper) || "USDT".equals(upper) || "USD".equals(upper)) {
+      return "USD";
+    }
+    return upper;
+  }
+
+  private org.knowm.xchange.instrument.Instrument resolveInstrument(org.knowm.xchange.instrument.Instrument requested) {
+    if (requested instanceof UniswapInstrument) {
+      return requested;
+    }
+    String canonBase = canonical(requested.getBase().getCurrencyCode());
+    String canonCounter = canonical(requested.getCounter().getCurrencyCode());
+    for (org.knowm.xchange.instrument.Instrument instr : exchange.getExchangeMetaData().getInstruments().keySet()) {
+      if (canonical(instr.getBase().getCurrencyCode()).equals(canonBase) &&
+          canonical(instr.getCounter().getCurrencyCode()).equals(canonCounter)) {
+        return instr;
+      }
+    }
+    return requested;
   }
 }

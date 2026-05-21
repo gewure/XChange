@@ -48,7 +48,7 @@ public class HuobiExchange extends BaseExchange implements Exchange {
     }
 
     HuobiCurrencyWrapper[] huobiCurrencies =
-        ((HuobiMarketDataServiceRaw) marketDataService).getHuobiCurrencies("");
+        ((HuobiMarketDataServiceRaw) marketDataService).getHuobiCurrencies(null);
     if (huobiCurrencies == null) {
       huobiCurrencies = new HuobiCurrencyWrapper[0];
     }

@@ -17,8 +17,8 @@ import org.knowm.xchange.okex.OkexExchange;
 public class OkexStreamingExchange extends OkexExchange implements StreamingExchange {
 
   // Production URIs
-  public static final String WS_PUBLIC_CHANNEL_URI = "wss://ws.okx.com:8443/ws/v5/public";
-  public static final String WS_PRIVATE_CHANNEL_URI = "wss://ws.okx.com:8443/ws/v5/private";
+  public static final String WS_PUBLIC_CHANNEL_URI = "wss://wseea.okx.com:8443/ws/v5/public";
+  public static final String WS_PRIVATE_CHANNEL_URI = "wss://wseea.okx.com:8443/ws/v5/private";
 
   public static final String AWS_WS_PUBLIC_CHANNEL_URI = "wss://wsaws.okx.com:8443/ws/v5/public";
   public static final String AWS_WS_PRIVATE_CHANNEL_URI = "wss://wsaws.okx.com:8443/ws/v5/private";

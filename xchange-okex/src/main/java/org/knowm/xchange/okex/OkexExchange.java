@@ -68,8 +68,8 @@ public class OkexExchange extends BaseExchange {
   public ExchangeSpecification getDefaultExchangeSpecification() {
 
     ExchangeSpecification exchangeSpecification = new ExchangeSpecification(this.getClass());
-    exchangeSpecification.setSslUri("https://www.okx.com");
-    exchangeSpecification.setHost("okx.com");
+    exchangeSpecification.setSslUri("https://eea.okx.com");
+    exchangeSpecification.setHost("eea.okx.com");
     exchangeSpecification.setPort(80);
     exchangeSpecification.setExchangeName("Okex");
     exchangeSpecification.setExchangeDescription("Okx Exchange");

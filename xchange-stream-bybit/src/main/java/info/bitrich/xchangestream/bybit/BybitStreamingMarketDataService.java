@@ -56,6 +56,16 @@ public class BybitStreamingMarketDataService implements StreamingMarketDataServi
    * @param args - orderbook depth
    */
   @Override
+  public Observable<OrderBook> getOrderBook(org.knowm.xchange.currency.CurrencyPair currencyPair, Object... args) {
+    return getOrderBook((Instrument) currencyPair, args);
+  }
+
+  @Override
+  public Observable<Trade> getTrades(org.knowm.xchange.currency.CurrencyPair currencyPair, Object... args) {
+    return getTrades((Instrument) currencyPair, args);
+  }
+
+  @Override
   public Observable<OrderBook> getOrderBook(Instrument instrument, Object... args) {
     String depth = "50";
     AtomicLong orderBookUpdateIdPrev = new AtomicLong();

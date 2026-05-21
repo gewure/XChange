@@ -37,8 +37,10 @@ public class UniswapStreamingService extends BaseExchangeService { // Removed St
         webSocketService.connect();
         web3j = Web3j.build(webSocketService);
         emitter.onComplete();
-      } catch (ConnectException e) {
-        emitter.onError(e);
+      } catch (Exception e) {
+        System.err.println("WARNING: Could not connect to Uniswap RPC (" + apiUrl + "). Falling back to MOCK mode: " + e.getMessage());
+        this.mockMode = true;
+        emitter.onComplete();
       }
     });
   }

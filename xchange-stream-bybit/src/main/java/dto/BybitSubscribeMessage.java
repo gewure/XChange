@@ -8,5 +8,5 @@ import lombok.Data;
 @AllArgsConstructor
 public class BybitSubscribeMessage {
   private final String op;
-  private final List<String> args;
+  private final List<Object> args;
 }

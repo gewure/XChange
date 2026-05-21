@@ -8,6 +8,6 @@ public final class UnixTimestampFactory implements TimestampFactory {
 
   @Override
   public Long createValue() {
-    return System.currentTimeMillis() / 1000L;
+    return (System.currentTimeMillis() + org.knowm.xchange.utils.DateUtils.getOffset()) / 1000L;
   }
 }

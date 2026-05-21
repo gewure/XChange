@@ -44,6 +44,9 @@ public class UniswapOnChainClient {
     String rpcUri = null;
     if (exchange != null && exchange.getExchangeSpecification() != null) {
         rpcUri = exchange.getExchangeSpecification().getSslUri();
+        if (rpcUri == null || rpcUri.isEmpty()) {
+            rpcUri = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem("RpcUri");
+        }
     }
     if (rpcUri == null || rpcUri.isEmpty() || rpcUri.toLowerCase().contains("mock") || rpcUri.toLowerCase().contains("dummy")) {
         this.isMock = true;

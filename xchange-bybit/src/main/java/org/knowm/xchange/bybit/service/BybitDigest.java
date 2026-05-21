@@ -23,8 +23,36 @@ public class BybitDigest extends BaseParamsDigest {
   public static final String X_BAPI_TIMESTAMP = "X-BAPI-TIMESTAMP";
   public static final String X_BAPI_RECV_WINDOW = "X-BAPI-RECV-WINDOW";
 
+  private java.security.PrivateKey privateKey;
+  private final boolean isRsa;
+
   public BybitDigest(String secretKeyBase64) {
-    super(secretKeyBase64, HMAC_SHA_256);
+    super(secretKeyBase64.contains("PRIVATE KEY") ? "dummy_key_for_rsa_auth_signing_dummy_key" : secretKeyBase64, HMAC_SHA_256);
+    if (secretKeyBase64.contains("PRIVATE KEY")) {
+        this.isRsa = true;
+        try {
+            this.privateKey = loadPrivateKey(secretKeyBase64);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Failed to load RSA private key", e);
+        }
+    } else {
+        this.isRsa = false;
+        this.privateKey = null;
+    }
+  }
+
+  private static java.security.PrivateKey loadPrivateKey(String pem) throws Exception {
+      String privateKeyPEM = pem
+          .replace("\\n", "")
+          .replace("-----BEGIN PRIVATE KEY-----", "")
+          .replace("-----END PRIVATE KEY-----", "")
+          .replace("-----BEGIN RSA PRIVATE KEY-----", "")
+          .replace("-----END RSA PRIVATE KEY-----", "")
+          .replaceAll("\\s", "");
+      byte[] encoded = java.util.Base64.getDecoder().decode(privateKeyPEM);
+      java.security.spec.PKCS8EncodedKeySpec keySpec = new java.security.spec.PKCS8EncodedKeySpec(encoded);
+      java.security.KeyFactory kf = java.security.KeyFactory.getInstance("RSA");
+      return kf.generatePrivate(keySpec);
   }
 
   public static ParamsDigest createInstance(String secretKeyBase64) {
@@ -50,9 +78,17 @@ public class BybitDigest extends BaseParamsDigest {
             + headers.getOrDefault(X_BAPI_RECV_WINDOW, "")
             + plainText;
 
-    Mac mac = getMac();
-    mac.update(input.getBytes(StandardCharsets.UTF_8));
-    return bytesToHex(mac.doFinal());
+    if (isRsa) {
+        java.security.Signature signature = java.security.Signature.getInstance("SHA256withRSA");
+        signature.initSign(privateKey);
+        signature.update(input.getBytes(StandardCharsets.UTF_8));
+        byte[] signed = signature.sign();
+        return java.util.Base64.getEncoder().encodeToString(signed);
+    } else {
+        Mac mac = getMac();
+        mac.update(input.getBytes(StandardCharsets.UTF_8));
+        return bytesToHex(mac.doFinal());
+    }
   }
 
   private static String getPlainText(

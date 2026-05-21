@@ -23,11 +23,21 @@ public class UniswapSubgraphClient {
 
   public UniswapSubgraphClient(UniswapExchange exchange) {
     UniswapExchangeSpecification spec = (UniswapExchangeSpecification) exchange.getExchangeSpecification();
-    this.subgraphUri = spec.getSubgraphUri();
+    String uri = spec.getSubgraphUri();
+    if (uri == null) {
+        uri = (String) spec.getExchangeSpecificParametersItem("subgraphUri");
+    }
+    if (uri == null) {
+        uri = (String) spec.getExchangeSpecificParametersItem("subgraphUrl");
+    }
+    this.subgraphUri = uri;
     this.httpClient = HttpClient.newHttpClient();
     this.objectMapper = new ObjectMapper();
     
     String rpcUri = spec.getSslUri();
+    if (rpcUri == null || rpcUri.isEmpty()) {
+        rpcUri = spec.getRpcUri();
+    }
     boolean isRpcMock = rpcUri == null || rpcUri.isEmpty() || rpcUri.toLowerCase().contains("mock") || rpcUri.toLowerCase().contains("dummy");
     boolean isSubgraphMock = subgraphUri == null || subgraphUri.isEmpty() || subgraphUri.toLowerCase().contains("mock") || subgraphUri.toLowerCase().contains("dummy");
     this.isMock = isRpcMock || isSubgraphMock;

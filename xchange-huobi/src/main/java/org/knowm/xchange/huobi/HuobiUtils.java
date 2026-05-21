@@ -27,6 +27,9 @@ public class HuobiUtils {
   private HuobiUtils() {}
 
   public static String createHuobiCurrencyPair(CurrencyPair currencyPair) {
+    if (currencyPair == null) {
+      return null;
+    }
     String pair = assetPairMapReverse.get(currencyPair);
     if ((pair == null) || (pair.length() == 0)) {
       throw new ExchangeException(

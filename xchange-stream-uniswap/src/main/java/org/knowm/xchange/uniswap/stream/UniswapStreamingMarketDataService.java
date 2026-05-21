@@ -163,18 +163,16 @@ public class UniswapStreamingMarketDataService implements StreamingMarketDataSer
 
     // Swap event signature: Swap(address,address,int256,int256,uint160,uint128,int24)
     // Topic 0: 0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67
-    org.web3j.protocol.core.methods.request.EthFilter filter = new org.web3j.protocol.core.methods.request.EthFilter(
-        DefaultBlockParameterName.LATEST,
-        DefaultBlockParameterName.LATEST,
-        poolAddress
-    );
-    filter.addSingleTopic("0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67");
-
-    io.reactivex.Flowable<org.web3j.protocol.core.methods.response.Log> rx2Flowable = service.getWeb3j().ethLogFlowable(filter);
+    io.reactivex.Flowable<org.web3j.protocol.websocket.events.LogNotification> rx2Flowable =
+        service.getWeb3j().logsNotifications(
+            java.util.List.of(poolAddress),
+            java.util.List.of("0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67")
+        );
 
     return io.reactivex.rxjava3.core.Flowable.fromPublisher(rx2Flowable).toObservable()
-        .flatMap(log -> {
+        .flatMap(logNotification -> {
             try {
+                org.web3j.protocol.websocket.events.Log log = logNotification.getParams().getResult();
                 String data = log.getData();
                 String cleanData = data.substring(2);
                 if (cleanData.length() < 320) {

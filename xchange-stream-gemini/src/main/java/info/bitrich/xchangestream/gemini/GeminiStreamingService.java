@@ -32,7 +32,7 @@ public class GeminiStreamingService {
   public Observable<JsonNode> subscribeChannel(CurrencyPair currencyPair, Object... args) {
     if (!productStreamingServices.containsKey(currencyPair)) {
       String symbolUri =
-          baseUri + currencyPair.getBase().toString() + currencyPair.getCounter().toString();
+          (baseUri + currencyPair.getBase().toString() + currencyPair.getCounter().toString()).toLowerCase();
       GeminiProductStreamingService productStreamingService =
           new GeminiProductStreamingService(symbolUri, currencyPair);
       productStreamingService.connect().blockingAwait();
