@@ -80,7 +80,7 @@ public class UniswapOnChainClient {
 
   public java.math.BigInteger getSqrtPriceX96(String poolAddress) throws IOException {
     if (isMock) {
-        if (poolAddress != null && poolAddress.toLowerCase().contains("0x11b815ef7559bf79875d9c1882d9e2f5608d3c5b")) {
+        if (poolAddress != null && poolAddress.toLowerCase().contains("0x11b815efb8f581194ae79006d24e0d814b7697f6")) {
             return new java.math.BigInteger("4425877864433604085429");
         } else if (poolAddress != null && poolAddress.toLowerCase().contains("0x9db246219767a4e69c11101d27082c875968f197")) {
             return new java.math.BigInteger("2408331187428766155601955073004");

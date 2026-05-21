@@ -190,8 +190,8 @@ public class UniswapMarketDataService implements MarketDataService {
       pools = new ArrayList<>();
       
       UniswapPoolDTO ethUsdt = new UniswapPoolDTO();
-      ethUsdt.setId("0x11b815efb8f581194ae79006d74e0df6b1399e5e");
-      ethUsdt.setFeeTier("500"); // 0.05%
+      ethUsdt.setId("0x11b815efB8f581194ae79006d24E0d814B7697F6");
+      ethUsdt.setFeeTier("3000"); // 0.3%
       
       UniswapPoolDTO.TokenDTO eth = new UniswapPoolDTO.TokenDTO();
       eth.setId("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2");
@@ -208,7 +208,7 @@ public class UniswapMarketDataService implements MarketDataService {
       pools.add(ethUsdt);
  
       UniswapPoolDTO wbtcUsdt = new UniswapPoolDTO();
-      wbtcUsdt.setId("0x9db9e0e515d970e3034989648425b11a512c96c4");
+      wbtcUsdt.setId("0x9db246219767a4e69c11101d27082c875968f197");
       wbtcUsdt.setFeeTier("3000"); // 0.3%
       
       UniswapPoolDTO.TokenDTO wbtc = new UniswapPoolDTO.TokenDTO();
