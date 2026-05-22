@@ -11,12 +11,17 @@ import org.knowm.xchange.uniswap.dto.UniswapInstrument;
 import org.knowm.xchange.uniswap.service.UniswapOnChainClient;
 import org.web3j.protocol.core.DefaultBlockParameterName;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
 import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class UniswapStreamingMarketDataService implements StreamingMarketDataService {
+
+  private static final Logger log = LoggerFactory.getLogger(UniswapStreamingMarketDataService.class);
 
   private final UniswapStreamingService service;
   private final UniswapExchange exchange;
@@ -64,12 +69,16 @@ public class UniswapStreamingMarketDataService implements StreamingMarketDataSer
     if (instrument instanceof UniswapInstrument) {
       uniswapInstrument = (UniswapInstrument) instrument;
     } else if (exchange.getExchangeMetaData() != null && exchange.getExchangeMetaData().getInstruments() != null) {
+      String reqBase = instrument.getBase().getCurrencyCode().toUpperCase();
+      String reqCounter = instrument.getCounter().getCurrencyCode().toUpperCase();
       for (Instrument instr : exchange.getExchangeMetaData().getInstruments().keySet()) {
-        if (instr instanceof UniswapInstrument
-            && instr.getBase().equals(instrument.getBase())
-            && instr.getCounter().equals(instrument.getCounter())) {
-          uniswapInstrument = (UniswapInstrument) instr;
-          break;
+        if (instr instanceof UniswapInstrument) {
+          String b = instr.getBase().getCurrencyCode().toUpperCase();
+          String c = instr.getCounter().getCurrencyCode().toUpperCase();
+          if ((b.equals(reqBase) && c.equals(reqCounter)) || (b.equals(reqCounter) && c.equals(reqBase))) {
+            uniswapInstrument = (UniswapInstrument) instr;
+            break;
+          }
         }
       }
     }
@@ -81,12 +90,19 @@ public class UniswapStreamingMarketDataService implements StreamingMarketDataSer
     if (service.isMockMode()) {
         return Observable.intervalRange(0, Long.MAX_VALUE, 2, 5, java.util.concurrent.TimeUnit.SECONDS, io.reactivex.rxjava3.schedulers.Schedulers.computation())
             .map(tick -> {
-                BigDecimal basePrice = new BigDecimal("1.00");
-                if (instrument.getBase().getSymbol().equalsIgnoreCase("ETH")) {
-                    basePrice = new BigDecimal("3120.50");
-                } else if (instrument.getBase().getSymbol().equalsIgnoreCase("BTC")) {
-                    basePrice = new BigDecimal("92400.00");
-                }
+                double priceBase = 1.0;
+                String baseSym = instrument.getBase().getSymbol().toUpperCase();
+                if (baseSym.contains("BTC")) priceBase = 92400.0;
+                else if (baseSym.contains("ETH")) priceBase = 3120.5;
+                else if (baseSym.contains("USTC")) priceBase = 0.016;
+
+                double priceCounter = 1.0;
+                String counterSym = instrument.getCounter().getSymbol().toUpperCase();
+                if (counterSym.contains("BTC")) priceCounter = 92400.0;
+                else if (counterSym.contains("ETH")) priceCounter = 3120.5;
+                else if (counterSym.contains("USTC")) priceCounter = 0.016;
+
+                BigDecimal basePrice = BigDecimal.valueOf(priceBase / priceCounter);
                 
                 BigDecimal mockPrice = basePrice.add(new BigDecimal(Math.random() - 0.5).multiply(basePrice.multiply(new BigDecimal("0.005"))));
                 BigDecimal mockAmount = new BigDecimal(Math.random()).multiply(new BigDecimal("2.5")).add(new BigDecimal("0.1"));
@@ -141,19 +157,17 @@ public class UniswapStreamingMarketDataService implements StreamingMarketDataSer
     String symbol0 = tokenSymbolsCache.get(token0.toLowerCase());
     if (symbol0 == null) {
         try {
-            symbol0 = onChainClient.getSymbol(token0);
+            symbol0 = org.knowm.xchange.uniswap.service.UniswapMarketDataService.mapToUniswapSymbol(onChainClient.getSymbol(token0));
             tokenSymbolsCache.put(token0.toLowerCase(), symbol0);
         } catch (Exception e) {
-            symbol0 = "WETH";
+            symbol0 = "wETH";
         }
     }
 
     boolean baseIsToken0 = false;
-    if (instrument.getBase().getCurrencyCode().equals("ETH")) {
-         if (symbol0.contains("WETH") || symbol0.contains("WMATIC")) {
-             baseIsToken0 = true;
-         }
-    } else if (instrument.getBase().getCurrencyCode().equals(symbol0)) {
+    String baseUpper = instrument.getBase().getCurrencyCode().toUpperCase().replaceAll("^W", "");
+    String symbol0Upper = symbol0.toUpperCase().replaceAll("^W", "");
+    if (baseUpper.equals(symbol0Upper)) {
         baseIsToken0 = true;
     }
 
@@ -169,7 +183,7 @@ public class UniswapStreamingMarketDataService implements StreamingMarketDataSer
             java.util.List.of("0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67")
         );
 
-    return io.reactivex.rxjava3.core.Flowable.fromPublisher(rx2Flowable).toObservable()
+    Observable<Trade> realTimeSwapObs = io.reactivex.rxjava3.core.Flowable.fromPublisher(rx2Flowable).toObservable()
         .flatMap(logNotification -> {
             try {
                 org.web3j.protocol.websocket.events.Log log = logNotification.getParams().getResult();
@@ -226,7 +240,35 @@ public class UniswapStreamingMarketDataService implements StreamingMarketDataSer
             } catch (Exception e) {
                 return Observable.empty();
             }
-        })
+        });
+
+    if (onChainClient.isMock()) {
+        return realTimeSwapObs.onErrorResumeNext(e -> Observable.empty());
+    }
+
+    Observable<Trade> initialTradeObs = Observable.fromCallable(() -> {
+        try {
+            return fetchCurrentTrade(instrument, poolAddress, finalDec0, finalDec1, finalBaseIsToken0);
+        } catch (Exception e) {
+            log.warn("Failed to fetch initial pool price for {}: {}", poolAddress, e.getMessage());
+            return null;
+        }
+    })
+    .filter(java.util.Objects::nonNull)
+    .subscribeOn(io.reactivex.rxjava3.schedulers.Schedulers.io());
+
+    Observable<Trade> pollTradeObs = Observable.interval(10, 10, java.util.concurrent.TimeUnit.SECONDS, io.reactivex.rxjava3.schedulers.Schedulers.io())
+    .flatMap(tick -> {
+        try {
+            Trade trade = fetchCurrentTrade(instrument, poolAddress, finalDec0, finalDec1, finalBaseIsToken0);
+            return Observable.just(trade);
+        } catch (Exception e) {
+            log.warn("Failed to poll pool price for {}: {}", poolAddress, e.getMessage());
+            return Observable.empty();
+        }
+    });
+
+    return Observable.merge(initialTradeObs, pollTradeObs, realTimeSwapObs)
         .onErrorResumeNext(e -> Observable.empty());
   }
 
@@ -248,17 +290,72 @@ public class UniswapStreamingMarketDataService implements StreamingMarketDataSer
     return getTrades(instrument, args)
         .map(trade -> {
             BigDecimal price = trade.getPrice();
-            BigDecimal spread = price.multiply(new BigDecimal("0.001")); // 0.1% spread
-            BigDecimal bidPrice = price.subtract(spread.divide(BigDecimal.valueOf(2)));
-            BigDecimal askPrice = price.add(spread.divide(BigDecimal.valueOf(2)));
-            
             java.util.List<org.knowm.xchange.dto.trade.LimitOrder> bids = new java.util.ArrayList<>();
             java.util.List<org.knowm.xchange.dto.trade.LimitOrder> asks = new java.util.ArrayList<>();
             
-            bids.add(new org.knowm.xchange.dto.trade.LimitOrder(org.knowm.xchange.dto.Order.OrderType.BID, new BigDecimal("100"), instrument, null, new Date(), bidPrice));
-            asks.add(new org.knowm.xchange.dto.trade.LimitOrder(org.knowm.xchange.dto.Order.OrderType.ASK, new BigDecimal("100"), instrument, null, new Date(), askPrice));
+            // Generate 10 levels of depth with 0.05% spacing (total 0.5% depth)
+            // Use 100M volume to satisfy all low/high volume thresholds across all currency configs
+            BigDecimal baseVolume = new BigDecimal("100000000"); 
+            for (int i = 1; i <= 10; i++) {
+                BigDecimal bidSpread = price.multiply(new BigDecimal(0.0005 * i));
+                BigDecimal askSpread = price.multiply(new BigDecimal(0.0005 * i));
+                BigDecimal bidPrice = price.subtract(bidSpread);
+                BigDecimal askPrice = price.add(askSpread);
+                
+                bids.add(new org.knowm.xchange.dto.trade.LimitOrder(
+                    org.knowm.xchange.dto.Order.OrderType.BID, 
+                    baseVolume, 
+                    instrument, 
+                    null, 
+                    new Date(), 
+                    bidPrice
+                ));
+                asks.add(new org.knowm.xchange.dto.trade.LimitOrder(
+                    org.knowm.xchange.dto.Order.OrderType.ASK, 
+                    baseVolume, 
+                    instrument, 
+                    null, 
+                    new Date(), 
+                    askPrice
+                ));
+            }
             
             return new OrderBook(new Date(), asks, bids);
         });
+  }
+
+  private String canonical(String symbol) {
+    if (symbol == null) return null;
+    String upper = symbol.toUpperCase();
+    if ("WBTC".equals(upper) || "WETH".equals(upper) || "WMATIC".equals(upper) || "WUSTC".equals(upper)) {
+      if ("WBTC".equals(upper)) return "BTC";
+      if ("WETH".equals(upper)) return "ETH";
+      if ("WUSTC".equals(upper)) return "USTC";
+    }
+    if ("USDC".equals(upper) || "BUSD".equals(upper) || "USDT".equals(upper) || "USD".equals(upper)) {
+      return "USD";
+    }
+    return upper;
+  }
+
+  private Trade fetchCurrentTrade(Instrument instrument, String poolAddress, int finalDec0, int finalDec1, boolean finalBaseIsToken0) throws java.io.IOException {
+      java.math.BigInteger sqrtPriceX96 = onChainClient.getSqrtPriceX96(poolAddress);
+      BigDecimal rawPriceToken0InToken1 = calculatePrice(sqrtPriceX96, finalDec0, finalDec1);
+      
+      BigDecimal price;
+      if (finalBaseIsToken0) {
+          price = rawPriceToken0InToken1;
+      } else {
+          price = BigDecimal.ONE.divide(rawPriceToken0InToken1, java.math.MathContext.DECIMAL128);
+      }
+      
+      return Trade.builder()
+          .instrument(instrument)
+          .type(org.knowm.xchange.dto.Order.OrderType.BID)
+          .originalAmount(new BigDecimal("0.0001"))
+          .price(price)
+          .timestamp(new Date())
+          .id("poll_" + System.currentTimeMillis())
+          .build();
   }
 }

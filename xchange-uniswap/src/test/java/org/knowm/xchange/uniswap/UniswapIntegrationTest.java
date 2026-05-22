@@ -18,7 +18,9 @@ public class UniswapIntegrationTest {
 
   @Test
   public void testMarketData() throws IOException {
-    Exchange exchange = ExchangeFactory.INSTANCE.createExchange(UniswapExchange.class);
+    org.knowm.xchange.ExchangeSpecification spec = new UniswapExchangeSpecification();
+    spec.setExchangeSpecificParametersItem("RpcUri", "http://mock-rpc.localhost");
+    Exchange exchange = ExchangeFactory.INSTANCE.createExchange(spec);
     exchange.remoteInit();
     
     Map<Instrument, org.knowm.xchange.dto.meta.InstrumentMetaData> instruments = exchange.getExchangeMetaData().getInstruments();

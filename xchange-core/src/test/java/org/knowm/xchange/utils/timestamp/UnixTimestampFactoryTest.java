@@ -10,11 +10,12 @@ public class UnixTimestampFactoryTest {
 
   @Test
   public void testCreateValueShouldReturnCurrentValidSecondsValue() {
-    long beforeUnixTimestamp = System.currentTimeMillis() / MILLIS_IN_SECOND;
+    long offset = org.knowm.xchange.utils.DateUtils.getOffset();
+    long beforeUnixTimestamp = (System.currentTimeMillis() + offset) / MILLIS_IN_SECOND;
 
     final Long unixTimestamp = UnixTimestampFactory.INSTANCE.createValue();
 
-    long afterUnixTimestamp = System.currentTimeMillis() / MILLIS_IN_SECOND;
+    long afterUnixTimestamp = (System.currentTimeMillis() + offset) / MILLIS_IN_SECOND;
 
     assertThat(unixTimestamp)
         .isGreaterThanOrEqualTo(beforeUnixTimestamp)

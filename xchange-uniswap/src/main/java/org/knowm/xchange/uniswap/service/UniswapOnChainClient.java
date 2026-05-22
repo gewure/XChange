@@ -78,6 +78,11 @@ public class UniswapOnChainClient {
     }
   }
 
+  public boolean isMock() {
+    return isMock;
+  }
+
+
   public java.math.BigInteger getSqrtPriceX96(String poolAddress) throws IOException {
     if (isMock) {
         if (poolAddress != null && poolAddress.toLowerCase().contains("0x11b815efb8f581194ae79006d24e0d814b7697f6")) {
@@ -165,6 +170,14 @@ public class UniswapOnChainClient {
         tokenIn, tokenOut, fee, recipient, deadline, amountIn, amountOutMinimum, sqrtPriceLimitX96);
 
     return sendTransaction(credentials, routerAddress, data, java.math.BigInteger.ZERO);
+  }
+
+  public String sendRawTransactionPayload(String to, String data, java.math.BigInteger value, String privateKey) throws IOException {
+    if (isMock) {
+        return "mock_raw_payload_tx_hash";
+    }
+    org.web3j.crypto.Credentials credentials = org.web3j.crypto.Credentials.create(privateKey);
+    return sendTransaction(credentials, to, data, value);
   }
 
   public String depositWETH(String wethAddress, java.math.BigInteger amount, String privateKey) throws IOException {

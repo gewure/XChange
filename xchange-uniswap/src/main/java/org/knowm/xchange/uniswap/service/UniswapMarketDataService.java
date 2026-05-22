@@ -59,6 +59,17 @@ public class UniswapMarketDataService implements MarketDataService {
     // Calculate price: (sqrtPriceX96 / 2^96)^2
     BigDecimal price = calculatePrice(sqrtPriceX96, dec0, dec1);
 
+    boolean baseIsToken0 = false;
+    String reqBaseCanon = canonical(instrument.getBase().getCurrencyCode());
+    String token0Canon = canonical(uniswapInstrument.getBase().getCurrencyCode());
+    if (reqBaseCanon != null && reqBaseCanon.equals(token0Canon)) {
+      baseIsToken0 = true;
+    }
+
+    if (!baseIsToken0) {
+      price = BigDecimal.ONE.divide(price, MathContext.DECIMAL128);
+    }
+
     return new Ticker.Builder()
         .instrument(instrument)
         .last(price)
@@ -122,11 +133,18 @@ public class UniswapMarketDataService implements MarketDataService {
     }
     UniswapInstrument uniswapInstrument = (UniswapInstrument) resolved;
     
+    boolean baseIsToken0 = false;
+    String reqBaseCanon = canonical(instrument.getBase().getCurrencyCode());
+    String token0Canon = canonical(uniswapInstrument.getBase().getCurrencyCode());
+    if (reqBaseCanon != null && reqBaseCanon.equals(token0Canon)) {
+      baseIsToken0 = true;
+    }
+    
     List<Trade> trades = new ArrayList<>();
     try {
       List<UniswapSwap> swaps = subgraphClient.getSwaps(uniswapInstrument.getPoolAddress());
       for (UniswapSwap swap : swaps) {
-        trades.add(adaptTrade(swap, instrument));
+        trades.add(adaptTrade(swap, instrument, baseIsToken0));
       }
     } catch (Exception e) {
       System.err.println("Warning: Failed to fetch swaps from subgraph, falling back to mock trade: " + e.getMessage());
@@ -152,11 +170,20 @@ public class UniswapMarketDataService implements MarketDataService {
     return new Trades(trades, Trades.TradeSortType.SortByTimestamp);
   }
 
-  private Trade adaptTrade(UniswapSwap swap, Instrument instrument) {
-    Order.OrderType type = swap.getAmount0().signum() < 0 ? Order.OrderType.BID : Order.OrderType.ASK;
+  private Trade adaptTrade(UniswapSwap swap, Instrument instrument, boolean baseIsToken0) {
+    BigDecimal price;
+    BigDecimal originalAmount;
+    Order.OrderType type;
     
-    BigDecimal price = swap.getAmount1().abs().divide(swap.getAmount0().abs(), MathContext.DECIMAL128);
-    BigDecimal originalAmount = swap.getAmount0().abs();
+    if (baseIsToken0) {
+      price = swap.getAmount1().abs().divide(swap.getAmount0().abs(), MathContext.DECIMAL128);
+      originalAmount = swap.getAmount0().abs();
+      type = swap.getAmount0().signum() < 0 ? Order.OrderType.BID : Order.OrderType.ASK;
+    } else {
+      price = swap.getAmount0().abs().divide(swap.getAmount1().abs(), MathContext.DECIMAL128);
+      originalAmount = swap.getAmount1().abs();
+      type = swap.getAmount1().signum() < 0 ? Order.OrderType.BID : Order.OrderType.ASK;
+    }
     
     return Trade.builder()
         .type(type)
@@ -186,7 +213,8 @@ public class UniswapMarketDataService implements MarketDataService {
     try {
       pools = subgraphClient.getPools();
     } catch (Exception e) {
-      System.err.println("Warning: Failed to load Uniswap pools from subgraph: " + e.getMessage() + ". Using fallback pools.");
+      System.err.println("Warning: Failed to load Uniswap pools from subgraph: " + e.toString() + ". Using fallback pools.");
+      e.printStackTrace();
       pools = new ArrayList<>();
       
       UniswapPoolDTO ethUsdt = new UniswapPoolDTO();
@@ -259,11 +287,108 @@ public class UniswapMarketDataService implements MarketDataService {
         pools.add(ustcEthPool);
     }
 
-    Map<org.knowm.xchange.instrument.Instrument, org.knowm.xchange.dto.meta.InstrumentMetaData> instrumentMetaDataMap = new HashMap<>();
+    // Explicitly inject the USDC/USTC pool to ensure it's tracked even if not in the top 20 TVL
+    UniswapPoolDTO usdcUstcPool = new UniswapPoolDTO();
+    usdcUstcPool.setId("0x59d8e2fd24b56a31eb6ac4b5ba749d120a7d1480"); // USDC/USTC pool
+    usdcUstcPool.setFeeTier("10000"); // typical fee tier: 1.0%
+
+    UniswapPoolDTO.TokenDTO usdc = new UniswapPoolDTO.TokenDTO();
+    usdc.setId("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"); // USDC address
+    usdc.setSymbol("USDC");
+    usdc.setDecimals("6");
+
+    // Re-use the ustc token defined above
+    usdcUstcPool.setToken0(usdc);
+    usdcUstcPool.setToken1(ustc);
+
+    boolean usdcUstcExists = false;
+    for (UniswapPoolDTO p : pools) {
+        if (p.getId().equalsIgnoreCase("0x59d8e2fd24b56a31eb6ac4b5ba749d120a7d1480")) {
+            usdcUstcExists = true;
+            break;
+        }
+    }
+    if (!usdcUstcExists) {
+        pools.add(usdcUstcPool);
+    }
+
+    // Explicitly inject the WBTC/WETH pool
+    UniswapPoolDTO wbtcEthPool = new UniswapPoolDTO();
+    wbtcEthPool.setId("0xcbcdf9626bc03e24f779434178a73a0b4bad62ed"); // WBTC/WETH pool
+    wbtcEthPool.setFeeTier("3000"); // 0.3%
     
+    UniswapPoolDTO.TokenDTO wbtc = new UniswapPoolDTO.TokenDTO();
+    wbtc.setId("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"); // WBTC address
+    wbtc.setSymbol("BTC");
+    wbtc.setDecimals("8");
+    
+    wbtcEthPool.setToken0(wbtc);
+    wbtcEthPool.setToken1(ustcEth); // reuse WETH address token
+    
+    boolean wbtcEthExists = false;
+    for (UniswapPoolDTO p : pools) {
+        if (p.getId().equalsIgnoreCase("0xcbcdf9626bc03e24f779434178a73a0b4bad62ed")) {
+            wbtcEthExists = true;
+            break;
+        }
+    }
+    if (!wbtcEthExists) {
+        pools.add(wbtcEthPool);
+    }
+
+    // Explicitly inject the USDC/USDT pool
+    UniswapPoolDTO usdcUsdtPool = new UniswapPoolDTO();
+    usdcUsdtPool.setId("0x3416cf6c708da44db2624d63ea0aaef7113527c6"); // USDC/USDT pool
+    usdcUsdtPool.setFeeTier("100"); // 0.01%
+    
+    UniswapPoolDTO.TokenDTO usdtToken = new UniswapPoolDTO.TokenDTO();
+    usdtToken.setId("0xdac17f958d2ee523a2206206994597c13d831ec7"); // USDT address
+    usdtToken.setSymbol("USDT");
+    usdtToken.setDecimals("6");
+    
+    usdcUsdtPool.setToken0(usdc);
+    usdcUsdtPool.setToken1(usdtToken);
+    
+    boolean usdcUsdtExists = false;
+    for (UniswapPoolDTO p : pools) {
+        if (p.getId().equalsIgnoreCase("0x3416cf6c708da44db2624d63ea0aaef7113527c6")) {
+            usdcUsdtExists = true;
+            break;
+        }
+    }
+    if (!usdcUsdtExists) {
+        pools.add(usdcUsdtPool);
+    }
+
+    // Explicitly inject the USDC/wBTC pool
+    UniswapPoolDTO usdcWbtcPool = new UniswapPoolDTO();
+    usdcWbtcPool.setId("0x99ac8ca7087fa4a2a1fb6357269965a2014abc35"); // USDC/WBTC 0.3% pool
+    usdcWbtcPool.setFeeTier("3000"); // 0.3%
+
+    UniswapPoolDTO.TokenDTO wbtcToken = new UniswapPoolDTO.TokenDTO();
+    wbtcToken.setId("0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"); // WBTC address
+    wbtcToken.setSymbol("WBTC"); // mapToUniswapSymbol will convert this to "wBTC"
+    wbtcToken.setDecimals("8");
+
+    usdcWbtcPool.setToken0(usdc);  // USDC (already defined above)
+    usdcWbtcPool.setToken1(wbtcToken);
+
+    boolean usdcWbtcExists = false;
+    for (UniswapPoolDTO p : pools) {
+        if (p.getId().equalsIgnoreCase("0x99ac8ca7087fa4a2a1fb6357269965a2014abc35")) {
+            usdcWbtcExists = true;
+            break;
+        }
+    }
+    if (!usdcWbtcExists) {
+        pools.add(usdcWbtcPool);
+    }
+
+    Map<org.knowm.xchange.instrument.Instrument, org.knowm.xchange.dto.meta.InstrumentMetaData> instrumentMetaDataMap = new HashMap<>();
+
     for (UniswapPoolDTO pool : pools) {
-      Currency base = new Currency(pool.getToken0().getSymbol());
-      Currency counter = new Currency(pool.getToken1().getSymbol());
+      Currency base = new Currency(mapToUniswapSymbol(pool.getToken0().getSymbol()));
+      Currency counter = new Currency(mapToUniswapSymbol(pool.getToken1().getSymbol()));
       int feeTier = Integer.parseInt(pool.getFeeTier());
       
       UniswapInstrument instrument = new UniswapInstrument(base, counter, pool.getId(), feeTier);
@@ -283,12 +408,33 @@ public class UniswapMarketDataService implements MarketDataService {
     exchange.getExchangeMetaData().setInstruments(instrumentMetaDataMap);
   }
 
+
+  public static String mapToUniswapSymbol(String symbol) {
+    if (symbol == null) return null;
+    String upper = symbol.toUpperCase();
+    if ("WETH".equals(upper) || "ETH".equals(upper)) {
+      return "wETH";
+    }
+    if ("WBTC".equals(upper) || "BTC".equals(upper)) {
+      return "wBTC";
+    }
+    if ("WUSTC".equals(upper) || "USTC".equals(upper) || "WUST".equals(upper) || "UST".equals(upper)) {
+      return "wUSTC";
+    }
+    if ("USDT".equals(upper) || "USD".equals(upper)) {
+      return "USDT";
+    }
+    return symbol;
+  }
+
+
   private String canonical(String symbol) {
     if (symbol == null) return null;
     String upper = symbol.toUpperCase();
-    if ("WBTC".equals(upper) || "WETH".equals(upper) || "WMATIC".equals(upper)) {
+    if ("WBTC".equals(upper) || "WETH".equals(upper) || "WMATIC".equals(upper) || "WUSTC".equals(upper)) {
       if ("WBTC".equals(upper)) return "BTC";
       if ("WETH".equals(upper)) return "ETH";
+      if ("WUSTC".equals(upper)) return "USTC";
     }
     if ("USDC".equals(upper) || "BUSD".equals(upper) || "USDT".equals(upper) || "USD".equals(upper)) {
       return "USD";
@@ -300,11 +446,12 @@ public class UniswapMarketDataService implements MarketDataService {
     if (requested instanceof UniswapInstrument) {
       return requested;
     }
-    String canonBase = canonical(requested.getBase().getCurrencyCode());
-    String canonCounter = canonical(requested.getCounter().getCurrencyCode());
+    String reqBase = requested.getBase().getCurrencyCode().toUpperCase();
+    String reqCounter = requested.getCounter().getCurrencyCode().toUpperCase();
     for (org.knowm.xchange.instrument.Instrument instr : exchange.getExchangeMetaData().getInstruments().keySet()) {
-      if (canonical(instr.getBase().getCurrencyCode()).equals(canonBase) &&
-          canonical(instr.getCounter().getCurrencyCode()).equals(canonCounter)) {
+      String b = instr.getBase().getCurrencyCode().toUpperCase();
+      String c = instr.getCounter().getCurrencyCode().toUpperCase();
+      if ((b.equals(reqBase) && c.equals(reqCounter)) || (b.equals(reqCounter) && c.equals(reqBase))) {
         return instr;
       }
     }

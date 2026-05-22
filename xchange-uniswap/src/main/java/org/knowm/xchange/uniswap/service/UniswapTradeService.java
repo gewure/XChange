@@ -56,6 +56,9 @@ public class UniswapTradeService implements TradeService {
     if (routerAddress == null) {
         routerAddress = "0xE592427A0AEce92De3Edee1F18E0157C05861564";
     }
+
+    String tradeApiKey = (String) exchange.getExchangeSpecification().getExchangeSpecificParametersItem(org.knowm.xchange.uniswap.UniswapExchangeSpecification.TRADE_API_KEY);
+    String walletAddress = org.web3j.crypto.Credentials.create(privateKey).getAddress();
     
     String token0 = onChainClient.getToken0(instrument.getPoolAddress());
     String token1 = onChainClient.getToken1(instrument.getPoolAddress());
@@ -136,8 +139,27 @@ public class UniswapTradeService implements TradeService {
         java.math.BigDecimal minOutDec = expectedOutDec.multiply(java.math.BigDecimal.valueOf(1.0 - slippageTolerance));
         amountOutMinimum = minOutDec.multiply(java.math.BigDecimal.TEN.pow(decimalsOut)).toBigInteger();
     }
+
     
-    String walletAddress = org.web3j.crypto.Credentials.create(privateKey).getAddress();
+    if (tradeApiKey != null && !tradeApiKey.isEmpty()) {
+        try {
+            UniswapTradeApiClient apiClient = new UniswapTradeApiClient(tradeApiKey);
+            UniswapTradeApiClient.TradePayload payload = apiClient.getQuoteAndPayload(
+                tokenIn, tokenOut, amountIn, walletAddress, slippageTolerance * 100);
+            
+            // Note: Trade API requires token approval to the permit2/universal router address.
+            // We assume the caller handles approvals for Trade API, or we approve the returned 'to' address.
+            java.math.BigInteger allowance = onChainClient.getAllowance(tokenIn, walletAddress, payload.to);
+            if (allowance.compareTo(amountIn) < 0) {
+                java.math.BigInteger maxUint256 = new java.math.BigInteger("2").pow(256).subtract(java.math.BigInteger.ONE);
+                onChainClient.approve(tokenIn, payload.to, maxUint256, privateKey);
+            }
+            return onChainClient.sendRawTransactionPayload(payload.to, payload.calldata, payload.value, privateKey);
+        } catch (Exception e) {
+            // Fallback to local routing
+            System.err.println("Trade API execution failed, falling back to local routing: " + e.getMessage());
+        }
+    }
     
     // Check Allowance
     java.math.BigInteger allowance = onChainClient.getAllowance(tokenIn, walletAddress, routerAddress);
@@ -176,11 +198,12 @@ public class UniswapTradeService implements TradeService {
     if (requested instanceof UniswapInstrument) {
       return requested;
     }
-    String canonBase = canonical(requested.getBase().getCurrencyCode());
-    String canonCounter = canonical(requested.getCounter().getCurrencyCode());
+    String reqBase = requested.getBase().getCurrencyCode().toUpperCase();
+    String reqCounter = requested.getCounter().getCurrencyCode().toUpperCase();
     for (org.knowm.xchange.instrument.Instrument instr : exchange.getExchangeMetaData().getInstruments().keySet()) {
-      if (canonical(instr.getBase().getCurrencyCode()).equals(canonBase) &&
-          canonical(instr.getCounter().getCurrencyCode()).equals(canonCounter)) {
+      String b = instr.getBase().getCurrencyCode().toUpperCase();
+      String c = instr.getCounter().getCurrencyCode().toUpperCase();
+      if ((b.equals(reqBase) && c.equals(reqCounter)) || (b.equals(reqCounter) && c.equals(reqBase))) {
         return instr;
       }
     }

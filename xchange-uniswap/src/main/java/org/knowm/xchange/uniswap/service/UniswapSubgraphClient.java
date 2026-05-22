@@ -30,8 +30,11 @@ public class UniswapSubgraphClient {
     if (uri == null) {
         uri = (String) spec.getExchangeSpecificParametersItem("subgraphUrl");
     }
-    this.subgraphUri = uri;
-    this.httpClient = HttpClient.newHttpClient();
+    this.subgraphUri = uri != null ? uri.trim() : null;
+    this.httpClient = HttpClient.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
+        .followRedirects(HttpClient.Redirect.NORMAL)
+        .build();
     this.objectMapper = new ObjectMapper();
     
     String rpcUri = spec.getSslUri();
@@ -68,13 +71,19 @@ public class UniswapSubgraphClient {
     );
 
     HttpRequest request = HttpRequest.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
         .uri(URI.create(subgraphUri))
         .header("Content-Type", "application/json")
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
         .POST(HttpRequest.BodyPublishers.ofString(query))
         .build();
 
     try {
       HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() != 200) {
+        String bodyPreview = response.body() != null ? response.body().substring(0, Math.min(100, response.body().length())) : "empty body";
+        throw new IOException("HTTP error " + response.statusCode() + " from subgraph: " + bodyPreview);
+      }
       JsonNode root = objectMapper.readTree(response.body());
       JsonNode swapsNode = root.path("data").path("swaps");
       
@@ -93,16 +102,23 @@ public class UniswapSubgraphClient {
     if (isMock()) {
         throw new IOException("Mock subgraph client: triggering fallback pools");
     }
+    System.out.println("DEBUG UniswapSubgraphClient subgraphUri: " + subgraphUri);
     String query = "{\"query\": \"{ pools(first: 20, orderBy: totalValueLockedUSD, orderDirection: desc) { id token0 { symbol decimals id } token1 { symbol decimals id } feeTier } }\"}";
 
     HttpRequest request = HttpRequest.newBuilder()
+        .version(HttpClient.Version.HTTP_1_1)
         .uri(URI.create(subgraphUri))
         .header("Content-Type", "application/json")
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36")
         .POST(HttpRequest.BodyPublishers.ofString(query))
         .build();
 
     try {
       HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() != 200) {
+        String bodyPreview = response.body() != null ? response.body().substring(0, Math.min(100, response.body().length())) : "empty body";
+        throw new IOException("HTTP error " + response.statusCode() + " from subgraph: " + bodyPreview);
+      }
       JsonNode root = objectMapper.readTree(response.body());
       JsonNode poolsNode = root.path("data").path("pools");
       

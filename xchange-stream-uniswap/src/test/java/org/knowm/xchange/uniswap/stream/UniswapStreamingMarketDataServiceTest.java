@@ -13,6 +13,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.methods.response.Log;
+import org.web3j.protocol.websocket.events.NotificationParams;
+import org.web3j.protocol.websocket.events.LogNotification;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -40,35 +42,46 @@ public class UniswapStreamingMarketDataServiceTest {
 
   @Test
   public void testGetTrades() throws InterruptedException {
-    // Mock log
-    Log log = new Log();
-    log.setTransactionHash("0x123");
     // Data: 0x + 160 bytes (5 * 32)
-    // amount0 (0), amount1 (0), sqrtPriceX96 (2^96 -> price 1), liquidity (0), tick (0)
-    // sqrtPriceX96 = 2^96. Hex: 1 followed by 24 zeros (96 bits = 24 hex chars)
-    // Wait, 2^96 is 1 << 96.
     BigInteger q96 = new BigInteger("2").pow(96);
     String sqrtPriceHex = q96.toString(16);
-    // Pad to 64 chars (32 bytes)
     while (sqrtPriceHex.length() < 64) {
       sqrtPriceHex = "0" + sqrtPriceHex;
     }
     
     StringBuilder data = new StringBuilder("0x");
-    // amount0 (64 chars)
-    for (int i = 0; i < 64; i++) data.append("0");
-    // amount1 (64 chars)
-    for (int i = 0; i < 64; i++) data.append("0");
-    // sqrtPriceX96 (64 chars)
+    for (int i = 0; i < 64; i++) data.append("0"); // amount0
+    for (int i = 0; i < 64; i++) data.append("0"); // amount1
     data.append(sqrtPriceHex);
-    // liquidity (64 chars)
-    for (int i = 0; i < 64; i++) data.append("0");
-    // tick (64 chars)
-    for (int i = 0; i < 64; i++) data.append("0");
-    
-    log.setData(data.toString());
+    for (int i = 0; i < 64; i++) data.append("0"); // liquidity
+    for (int i = 0; i < 64; i++) data.append("0"); // tick
 
-    when(web3j.ethLogFlowable(any())).thenReturn(io.reactivex.Flowable.just(log));
+    org.web3j.protocol.websocket.events.Log mockLog = org.mockito.Mockito.mock(org.web3j.protocol.websocket.events.Log.class);
+    org.mockito.Mockito.when(mockLog.getTransactionHash()).thenReturn("0x123");
+    org.mockito.Mockito.when(mockLog.getData()).thenReturn(data.toString());
+
+    LogNotification notification = org.mockito.Mockito.mock(LogNotification.class);
+    NotificationParams params = org.mockito.Mockito.mock(NotificationParams.class);
+    org.mockito.Mockito.when(params.getResult()).thenReturn(mockLog);
+    org.mockito.Mockito.when(notification.getParams()).thenReturn(params);
+
+    when(web3j.logsNotifications(any(), any())).thenReturn(io.reactivex.Flowable.just(notification));
+
+    try {
+        java.lang.reflect.Field poolTokensCache = UniswapStreamingMarketDataService.class.getDeclaredField("poolTokensCache");
+        poolTokensCache.setAccessible(true);
+        ((java.util.Map<String, String[]>) poolTokensCache.get(marketDataService)).put("0xpool", new String[]{"0xToken0", "0xToken1"});
+
+        java.lang.reflect.Field tokenDecimalsCache = UniswapStreamingMarketDataService.class.getDeclaredField("tokenDecimalsCache");
+        tokenDecimalsCache.setAccessible(true);
+        ((java.util.Map<String, Integer>) tokenDecimalsCache.get(marketDataService)).put("0xtoken0", 18);
+        ((java.util.Map<String, Integer>) tokenDecimalsCache.get(marketDataService)).put("0xtoken1", 6);
+
+        java.lang.reflect.Field tokenSymbolsCache = UniswapStreamingMarketDataService.class.getDeclaredField("tokenSymbolsCache");
+        tokenSymbolsCache.setAccessible(true);
+        ((java.util.Map<String, String>) tokenSymbolsCache.get(marketDataService)).put("0xtoken0", "WETH");
+        ((java.util.Map<String, String>) tokenSymbolsCache.get(marketDataService)).put("0xtoken1", "USDC");
+    } catch (Exception e) {}
 
     UniswapInstrument instrument = new UniswapInstrument(Currency.ETH, Currency.USDC, "0xPool", 3000);
     TestObserver<Trade> observer = marketDataService.getTrades(instrument).test();

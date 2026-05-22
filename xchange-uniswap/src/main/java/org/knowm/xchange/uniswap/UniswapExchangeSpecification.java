@@ -13,6 +13,7 @@ public class UniswapExchangeSpecification extends ExchangeSpecification {
   public static final String SLIPPAGE_TOLERANCE = "SlippageTolerance"; // Double, e.g. 0.005 for 0.5%
   public static final String FLASHBOTS_RELAY_URI = "FlashbotsRelayUri"; // e.g. https://relay.flashbots.net
   public static final String FLASHBOTS_RELAY_SIGNING_KEY = "FlashbotsRelaySigningKey"; // Private key for signing relay requests
+  public static final String TRADE_API_KEY = "TradeApiKey"; // Uniswap Trade API key
 
   public UniswapExchangeSpecification() {
     super(UniswapExchange.class);
@@ -48,6 +49,14 @@ public class UniswapExchangeSpecification extends ExchangeSpecification {
 
   public String getSubgraphUri() {
     return (String) getExchangeSpecificParametersItem(SUBGRAPH_URI);
+  }
+
+  public void setTradeApiKey(String tradeApiKey) {
+    setExchangeSpecificParametersItem(TRADE_API_KEY, tradeApiKey);
+  }
+
+  public String getTradeApiKey() {
+    return (String) getExchangeSpecificParametersItem(TRADE_API_KEY);
   }
 
   public void setChainId(long chainId) {
