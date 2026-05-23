@@ -105,4 +105,16 @@ public interface StreamingMarketDataService {
       Instrument instrument, Object... args) {
     throw new NotYetImplementedForExchangeException("getOrderBookUpdates");
   }
+
+  /**
+   * Get candlestick data.
+   *
+   * @param instrument Instrument to get the candlestick data for
+   * @param interval Candlestick interval
+   * @return {@link Observable} that emits {@link CandleStickData} when exchange sends the update.
+   */
+  default Observable<CandleStickData> getCandleStick(
+      Instrument instrument, CandleStickInterval interval) {
+    throw new NotYetImplementedForExchangeException("getCandleStick");
+  }
 }

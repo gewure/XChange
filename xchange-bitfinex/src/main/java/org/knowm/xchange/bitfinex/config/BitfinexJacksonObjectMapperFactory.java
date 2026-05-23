@@ -19,5 +19,8 @@ public class BitfinexJacksonObjectMapperFactory extends DefaultJacksonObjectMapp
 
     // enable parsing to Instant
     objectMapper.registerModule(new JavaTimeModule());
+
+    // store object mapper for using in module
+    Config.getInstance().setObjectMapper(objectMapper);
   }
 }

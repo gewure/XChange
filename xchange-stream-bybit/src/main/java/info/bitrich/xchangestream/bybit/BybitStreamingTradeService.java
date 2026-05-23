@@ -1,17 +1,10 @@
 package info.bitrich.xchangestream.bybit;
 
-import static info.bitrich.xchangestream.bybit.BybitUserTradeStreamingService.BATCH_ORDER_CHANGE;
-import static info.bitrich.xchangestream.bybit.BybitUserTradeStreamingService.ORDER_CANCEL;
-import static info.bitrich.xchangestream.bybit.BybitUserTradeStreamingService.ORDER_CHANGE;
-import static info.bitrich.xchangestream.bybit.BybitUserTradeStreamingService.ORDER_CREATE;
+import static info.bitrich.xchangestream.bybit.BybitUserTradeStreamingService.*;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dto.trade.BybitComplexOrderChanges;
-import dto.trade.BybitComplexPositionChanges;
-import dto.trade.BybitOrderChangesResponse;
-import dto.trade.BybitPositionChangesResponse;
-import dto.trade.BybitStreamOrderResponse;
+import info.bitrich.xchangestream.bybit.dto.trade.*;
 import info.bitrich.xchangestream.core.StreamingTradeService;
 import info.bitrich.xchangestream.service.netty.StreamingObjectMapperHelper;
 import io.github.resilience4j.rxjava3.ratelimiter.operator.RateLimiterOperator;
@@ -52,7 +45,8 @@ public class BybitStreamingTradeService extends BybitBaseService implements Stre
     this.userTradeService = userTradeService;
   }
 
-  public Single<Integer> placeMarketOrder(MarketOrder order) {
+  @Override
+  public Single<Integer> placeMarketOrder(MarketOrder order, Object... args) {
     BybitCategory category = BybitAdapters.getCategory(order.getInstrument());
     Observable<Integer> observable =
         userTradeService
@@ -74,7 +68,8 @@ public class BybitStreamingTradeService extends BybitBaseService implements Stre
         .toSingle();
   }
 
-  public Single<Integer> placeLimitOrder(LimitOrder order) {
+  @Override
+  public Single<Integer> placeLimitOrder(LimitOrder order, Object... args) {
     BybitCategory category = BybitAdapters.getCategory(order.getInstrument());
     Observable<Integer> observable =
         userTradeService
@@ -96,7 +91,8 @@ public class BybitStreamingTradeService extends BybitBaseService implements Stre
         .toSingle();
   }
 
-  public Single<Integer> changeOrder(LimitOrder order) {
+  @Override
+  public Single<Integer> changeOrder(LimitOrder order, Object... args) {
     BybitCategory category = BybitAdapters.getCategory(order.getInstrument());
     Observable<Integer> observable =
         userTradeService
@@ -152,7 +148,8 @@ public class BybitStreamingTradeService extends BybitBaseService implements Stre
     }
   }
 
-  public Single<Integer> cancelOrder(CancelOrderParams params) {
+  @Override
+  public Single<Integer> cancelOrder(CancelOrderParams params, Object... args) {
     BybitCancelOrderParams bybitParams = (BybitCancelOrderParams) params;
     BybitCategory category = BybitAdapters.getCategory(bybitParams.getInstrument());
     Observable<Integer> observable =
@@ -178,33 +175,35 @@ public class BybitStreamingTradeService extends BybitBaseService implements Stre
 
   public Single<List<Integer>> batchCancelOrder(List<CancelOrderParams> params) {
     List<BybitCancelOrderParams> bybitParams = new ArrayList<>();
-    params.forEach(d->bybitParams.add((BybitCancelOrderParams) d));
+    params.forEach(d -> bybitParams.add((BybitCancelOrderParams) d));
     BybitCategory category = BybitAdapters.getCategory(bybitParams.get(0).getInstrument());
     try {
-    Observable<List<Integer>> observable = userTradeService
-          .subscribeChannel(
-              BybitUserTradeStreamingService.BATCH_ORDER_CANCEL,
-              mapper.writeValueAsString(bybitParams.toArray(new BybitCancelOrderParams[0])),
-                      String.valueOf(System.nanoTime()), category)
-          .flatMap(
-              node -> {
-                BybitStreamOrderResponse response =
-                    mapper.treeToValue(node, BybitStreamOrderResponse.class);
-                if (response.getRetCode() == 0) {
-                  List<Integer> list = new ArrayList<>();
-                  response
-                      .getRetExtInfo()
-                      .getList()
-                      .forEach(retExtInfo -> list.add(Integer.valueOf(retExtInfo.getCode())));
-                  return Observable.just(list);
-                } else {
-                  return Observable.just(List.of(response.getRetCode()));
-                }
-              });
-    return observable
-        .firstElement()
-        .compose(RateLimiterOperator.of(getBatchCancelOrderRateLimiter(category)))
-        .toSingle();
+      Observable<List<Integer>> observable =
+          userTradeService
+              .subscribeChannel(
+                  BybitUserTradeStreamingService.BATCH_ORDER_CANCEL,
+                  mapper.writeValueAsString(bybitParams.toArray(new BybitCancelOrderParams[0])),
+                  String.valueOf(System.nanoTime()),
+                  category)
+              .flatMap(
+                  node -> {
+                    BybitStreamOrderResponse response =
+                        mapper.treeToValue(node, BybitStreamOrderResponse.class);
+                    if (response.getRetCode() == 0) {
+                      List<Integer> list = new ArrayList<>();
+                      response
+                          .getRetExtInfo()
+                          .getList()
+                          .forEach(retExtInfo -> list.add(Integer.valueOf(retExtInfo.getCode())));
+                      return Observable.just(list);
+                    } else {
+                      return Observable.just(List.of(response.getRetCode()));
+                    }
+                  });
+      return observable
+          .firstElement()
+          .compose(RateLimiterOperator.of(getBatchCancelOrderRateLimiter(category)))
+          .toSingle();
     } catch (JsonProcessingException e) {
       throw new RuntimeException(e);
     }

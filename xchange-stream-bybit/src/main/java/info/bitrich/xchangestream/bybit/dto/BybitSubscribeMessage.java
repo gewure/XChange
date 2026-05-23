@@ -1,0 +1,12 @@
+package info.bitrich.xchangestream.bybit.dto;
+
+import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class BybitSubscribeMessage {
+  private final String op;
+  private final List<Object> args;
+}

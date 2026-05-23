@@ -20,10 +20,12 @@ import org.knowm.xchange.okex.dto.marketdata.OkexInstrument;
 import org.knowm.xchange.okex.dto.marketdata.OkexOrderbook;
 import org.knowm.xchange.okex.dto.marketdata.OkexTicker;
 import org.knowm.xchange.okex.dto.marketdata.OkexTrade;
+import org.knowm.xchange.okex.dto.marketdata.OkxFundingRateHistory;
 import org.knowm.xchange.utils.DateUtils;
 
 /** Author: Max Gao (gaamox@tutanota.com) Created: 08-06-2021 */
 public class OkexMarketDataServiceRaw extends OkexBaseService {
+
   public OkexMarketDataServiceRaw(
       OkexExchange exchange, ResilienceRegistries resilienceRegistries) {
     super(exchange, resilienceRegistries);
@@ -149,14 +151,20 @@ public class OkexMarketDataServiceRaw extends OkexBaseService {
   public OkexResponse<List<OkexCandleStick>> getHistoryCandle(
       String instrument, String after, String before, String bar, String limit)
       throws OkexException, IOException {
-    return okex.getHistoryCandles(
-        instrument,
-        after,
-        before,
-        bar,
-        limit,
-        (String)
-            exchange.getExchangeSpecification().getExchangeSpecificParametersItem(PARAM_SIMULATED));
+    return decorateApiCall(
+            () ->
+                okex.getHistoryCandles(
+                    instrument,
+                    after,
+                    before,
+                    bar,
+                    limit,
+                    (String)
+                        exchange
+                            .getExchangeSpecification()
+                            .getExchangeSpecificParametersItem(PARAM_SIMULATED)))
+        .withRateLimiter(rateLimiter(Okex.candlesHistoryPath))
+        .call();
   }
 
   public OkexResponse<List<OkexCandleStick>> getCandle(
@@ -170,5 +178,23 @@ public class OkexMarketDataServiceRaw extends OkexBaseService {
         limit,
         (String)
             exchange.getExchangeSpecification().getExchangeSpecificParametersItem(PARAM_SIMULATED));
+  }
+
+  public List<OkxFundingRateHistory> getOkxFundingRateHistoryRaw(
+      String instrument, Long startTime, Long endTime, Integer limit) throws IOException {
+    return decorateApiCall(
+            () ->
+                okex.getFundingRateHistory(
+                        instrument,
+                        endTime,
+                        startTime,
+                        limit,
+                        (String)
+                            exchange
+                                .getExchangeSpecification()
+                                .getExchangeSpecificParametersItem(PARAM_SIMULATED))
+                    .getData())
+        .withRateLimiter(rateLimiter(Okex.fundingRateHistoryPath))
+        .call();
   }
 }

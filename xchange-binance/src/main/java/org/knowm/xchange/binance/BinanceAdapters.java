@@ -451,7 +451,7 @@ public class BinanceAdapters {
       for (BinanceKline chartData : klines) {
         candleSticks.add(
             new CandleStick.Builder()
-                .timestamp(new Date(chartData.getCloseTime()))
+                .timestamp(Instant.ofEpochMilli(chartData.getCloseTime()))
                 .open(chartData.getOpen())
                 .high(chartData.getHigh())
                 .low(chartData.getLow())
@@ -675,7 +675,7 @@ public class BinanceAdapters {
                     BigDecimal.valueOf(8),
                     binanceFundingRate.getLastFundingRate().scale(),
                     RoundingMode.HALF_EVEN))
-        .fundingRate8h(binanceFundingRate.getLastFundingRate())
+        .fundingRate(binanceFundingRate.getLastFundingRate())
         .instrument(binanceFundingRate.getInstrument())
         .fundingRateDate(binanceFundingRate.getNextFundingTime())
         .fundingRateEffectiveInMinutes(

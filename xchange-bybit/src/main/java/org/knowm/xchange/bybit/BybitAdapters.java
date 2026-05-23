@@ -8,20 +8,19 @@ import static org.knowm.xchange.bybit.dto.trade.details.BybitHedgeMode.TWOWAY;
 import java.math.BigDecimal;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
+import java.util.*;
 import org.knowm.xchange.bybit.dto.BybitCategory;
 import org.knowm.xchange.bybit.dto.BybitResult;
 import org.knowm.xchange.bybit.dto.account.allcoins.BybitAllCoinBalance;
 import org.knowm.xchange.bybit.dto.account.allcoins.BybitAllCoinsBalance;
 import org.knowm.xchange.bybit.dto.account.walletbalance.BybitCoinWalletBalance;
+import org.knowm.xchange.bybit.dto.marketdata.BybitKline;
+import org.knowm.xchange.bybit.dto.marketdata.BybitKlines;
+import org.knowm.xchange.bybit.dto.marketdata.candles.BybitCandleStickInterval;
 import org.knowm.xchange.bybit.dto.marketdata.instruments.BybitInstrumentInfo;
 import org.knowm.xchange.bybit.dto.marketdata.instruments.linear.BybitLinearInverseInstrumentInfo;
 import org.knowm.xchange.bybit.dto.marketdata.instruments.option.BybitOptionInstrumentInfo;
@@ -30,11 +29,7 @@ import org.knowm.xchange.bybit.dto.marketdata.tickers.BybitTicker;
 import org.knowm.xchange.bybit.dto.marketdata.tickers.linear.BybitLinearInverseTicker;
 import org.knowm.xchange.bybit.dto.marketdata.tickers.option.BybitOptionTicker;
 import org.knowm.xchange.bybit.dto.marketdata.tickers.spot.BybitSpotTicker;
-import org.knowm.xchange.bybit.dto.trade.BybitAmendOrderPayload;
-import org.knowm.xchange.bybit.dto.trade.BybitOrderStatus;
-import org.knowm.xchange.bybit.dto.trade.BybitOrderType;
-import org.knowm.xchange.bybit.dto.trade.BybitPlaceOrderPayload;
-import org.knowm.xchange.bybit.dto.trade.BybitSide;
+import org.knowm.xchange.bybit.dto.trade.*;
 import org.knowm.xchange.bybit.dto.trade.details.BybitHedgeMode;
 import org.knowm.xchange.bybit.dto.trade.details.BybitOrderDetail;
 import org.knowm.xchange.bybit.dto.trade.details.BybitTimeInForce;
@@ -49,6 +44,9 @@ import org.knowm.xchange.dto.Order.OrderStatus;
 import org.knowm.xchange.dto.Order.OrderType;
 import org.knowm.xchange.dto.account.Balance;
 import org.knowm.xchange.dto.account.Wallet;
+import org.knowm.xchange.dto.marketdata.CandleStick;
+import org.knowm.xchange.dto.marketdata.CandleStickData;
+import org.knowm.xchange.dto.marketdata.CandleStickInterval;
 import org.knowm.xchange.dto.marketdata.Ticker;
 import org.knowm.xchange.dto.marketdata.Ticker.Builder;
 import org.knowm.xchange.dto.meta.InstrumentMetaData;
@@ -64,6 +62,37 @@ public class BybitAdapters {
   public static final List<String> QUOTE_CURRENCIES =
       Arrays.asList(
           "USDT", "USDC", "USDE", "EUR", "BRL", "PLN", "TRY", "SOL", "BTC", "ETH", "DAI", "BRZ");
+
+  public static BybitCandleStickInterval toBybitCandleStickInterval(CandleStickInterval interval) {
+    switch (interval) {
+      case m1:
+        return BybitCandleStickInterval.m1;
+      case m3:
+        return BybitCandleStickInterval.m3;
+      case m5:
+        return BybitCandleStickInterval.m5;
+      case m15:
+        return BybitCandleStickInterval.m15;
+      case m30:
+        return BybitCandleStickInterval.m30;
+      case h1:
+        return BybitCandleStickInterval.m60;
+      case h2:
+        return BybitCandleStickInterval.m120;
+      case h6:
+        return BybitCandleStickInterval.m360;
+      case h12:
+        return BybitCandleStickInterval.m720;
+      case d1:
+        return BybitCandleStickInterval.d1;
+      case w1:
+        return BybitCandleStickInterval.w1;
+      case M1:
+        return BybitCandleStickInterval.M1;
+      default:
+        throw new IllegalArgumentException("Unsupported interval: " + interval);
+    }
+  }
 
   public static Wallet adaptBybitBalances(List<BybitCoinWalletBalance> coinWalletBalances) {
     List<Balance> balances = new ArrayList<>(coinWalletBalances.size());
@@ -166,7 +195,6 @@ public class BybitAdapters {
   }
 
   public static CurrencyPair guessSymbol(String symbol) {
-    // SPOT Only
     for (String quoteCurrency : QUOTE_CURRENCIES) {
       if (symbol.endsWith(quoteCurrency)) {
         int splitIndex = symbol.lastIndexOf(quoteCurrency);
@@ -568,5 +596,27 @@ public class BybitAdapters {
         null,
         null,
         null);
+  }
+
+  public static CandleStickData adaptCandleStickData(
+      BybitKlines bybitKlines, BybitCategory category) {
+    Instrument instrument = convertBybitSymbolToInstrument(bybitKlines.getSymbol(), category);
+    List<CandleStick> candleSticks = new ArrayList<>();
+    for (BybitKline bybitKline : bybitKlines.getList()) {
+      candleSticks.add(adaptBybitKline(bybitKline));
+    }
+    return new CandleStickData(instrument, candleSticks);
+  }
+
+  private static CandleStick adaptBybitKline(BybitKline bybitKline) {
+    return new CandleStick.Builder()
+        .timestamp(Instant.ofEpochMilli(Long.parseLong(bybitKline.getStartTime())))
+        .open(new BigDecimal(bybitKline.getOpenPrice()))
+        .high(new BigDecimal(bybitKline.getHighPrice()))
+        .low(new BigDecimal(bybitKline.getLowPrice()))
+        .close(new BigDecimal(bybitKline.getClosePrice()))
+        .volume(new BigDecimal(bybitKline.getVolume()))
+        .quotaVolume(new BigDecimal(bybitKline.getTurnover()))
+        .build();
   }
 }

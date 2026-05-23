@@ -1,5 +1,7 @@
 package org.knowm.xchange.okex.service;
 
+import lombok.Getter;
+
 public enum OkexCandleStickPeriodType {
   CANDLE_STICK_1M(1, "1m"),
   CANDLE_STICK_3M(3, "3m"),
@@ -10,10 +12,10 @@ public enum OkexCandleStickPeriodType {
   CANDLE_STICK_2H(2 * 60, "2H"),
   CANDLE_STICK_4H(4 * 60, "4H");
   private final long periodInSecs;
-  private final String fieldValue;
+  @Getter private final String fieldValue;
 
   OkexCandleStickPeriodType(long periodInMinutes, String fieldValue) {
-    this.periodInSecs = periodInMinutes * 1000;
+    this.periodInSecs = periodInMinutes * 60;
     this.fieldValue = fieldValue;
   }
 
@@ -35,9 +37,5 @@ public enum OkexCandleStickPeriodType {
       result[index++] = period.periodInSecs;
     }
     return result;
-  }
-
-  public String getFieldValue() {
-    return fieldValue;
   }
 }
