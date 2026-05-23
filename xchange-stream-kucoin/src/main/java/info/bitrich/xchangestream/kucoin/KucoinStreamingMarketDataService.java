@@ -160,7 +160,7 @@ public class KucoinStreamingMarketDataService implements StreamingMarketDataServ
       try {
         logger.info("Fetching initial orderbook snapshot for {} ", currencyPair);
         onApiCall.run();
-        OrderBookResponse book = marketDataService.getKucoinOrderBookFull(currencyPair);
+        OrderBookResponse book = marketDataService.getKucoinOrderBookPartial(currencyPair);
         lastUpdateId.set(Long.parseLong(book.getSequence()));
         snapshotLastUpdateId.set(lastUpdateId.get());
         orderBook = KucoinAdapters.adaptOrderBook(currencyPair, book);

@@ -1,33 +1,20 @@
 package org.knowm.xchange.uniswap.dto;
 
 import org.knowm.xchange.currency.Currency;
-import org.knowm.xchange.instrument.Instrument;
+import org.knowm.xchange.currency.CurrencyPair;
 
 import java.io.Serializable;
 import java.util.Objects;
 
-public class UniswapInstrument extends Instrument implements Serializable {
+public class UniswapInstrument extends CurrencyPair implements Serializable {
 
-  private final Currency base;
-  private final Currency counter;
   private final String poolAddress;
   private final int feeTier;
 
   public UniswapInstrument(Currency base, Currency counter, String poolAddress, int feeTier) {
-    this.base = base;
-    this.counter = counter;
+    super(base, counter);
     this.poolAddress = poolAddress;
     this.feeTier = feeTier;
-  }
-
-  @Override
-  public Currency getBase() {
-    return base;
-  }
-
-  @Override
-  public Currency getCounter() {
-    return counter;
   }
 
   public String getPoolAddress() {
