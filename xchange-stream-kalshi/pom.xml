@@ -24,6 +24,12 @@
             <groupId>org.knowm.xchange</groupId>
             <artifactId>xchange-stream-service-netty</artifactId>
             <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.bouncycastle</groupId>
+                    <artifactId>bcprov-jdk18on</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 </project>
