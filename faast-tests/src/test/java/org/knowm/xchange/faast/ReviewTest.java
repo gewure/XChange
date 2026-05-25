@@ -68,7 +68,8 @@ public class ReviewTest extends ComplianceTest {
             createExchange(HuobiStreamingExchange.class),
 
             // 10. Bitfinex
-            createExchange(BitfinexStreamingExchange.class)
+            createExchange(BitfinexStreamingExchange.class),
+            createExchange(org.knowm.xchange.kalshi.KalshiStreamingExchange.class)
         ).filter(e -> e != null);
     }
 
