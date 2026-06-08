@@ -14,6 +14,8 @@ public class KalshiExchange extends BaseExchange implements Exchange {
           this.signatureCreator = KalshiDigest.createInstance(this.exchangeSpecification.getSecretKey());
       }
       this.marketDataService = new KalshiMarketDataService(this);
+      this.accountService = new KalshiAccountService(this);
+      this.tradeService = new KalshiTradeService(this);
   }
 
   @Override

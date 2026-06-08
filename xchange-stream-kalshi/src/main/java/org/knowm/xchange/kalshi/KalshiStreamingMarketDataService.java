@@ -167,14 +167,28 @@ public class KalshiStreamingMarketDataService implements StreamingMarketDataServ
         }
 
         public synchronized OrderBook toOrderBook() {
+            // YES bids on Kalshi are direct: you place a YES BUY order
             List<LimitOrder> bidOrders = new ArrayList<>(bids.size());
             for (Map.Entry<BigDecimal, BigDecimal> entry : bids.entrySet()) {
-                bidOrders.add(new LimitOrder(Order.OrderType.BID, entry.getValue(), instrument, "", lastUpdate, entry.getKey()));
+                LimitOrder o = new LimitOrder.Builder(Order.OrderType.BID, instrument)
+                        .originalAmount(entry.getValue())
+                        .timestamp(lastUpdate)
+                        .limitPrice(entry.getKey())
+                        .userReference("direct")
+                        .build();
+                bidOrders.add(o);
             }
 
+            // Kalshi asks are implied from NO bids: to get YES at this price you buy NO
             List<LimitOrder> askOrders = new ArrayList<>(asks.size());
             for (Map.Entry<BigDecimal, BigDecimal> entry : asks.entrySet()) {
-                askOrders.add(new LimitOrder(Order.OrderType.ASK, entry.getValue(), instrument, "", lastUpdate, entry.getKey()));
+                LimitOrder o = new LimitOrder.Builder(Order.OrderType.ASK, instrument)
+                        .originalAmount(entry.getValue())
+                        .timestamp(lastUpdate)
+                        .limitPrice(entry.getKey())
+                        .userReference("implied")
+                        .build();
+                askOrders.add(o);
             }
 
             return new OrderBook(lastUpdate, askOrders, bidOrders);

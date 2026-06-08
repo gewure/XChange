@@ -2,33 +2,32 @@ package org.knowm.xchange.poloniex.service;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.stream.Collectors;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.Order;
 import org.knowm.xchange.dto.Order.OrderType;
-import org.knowm.xchange.dto.marketdata.Trades.TradeSortType;
 import org.knowm.xchange.dto.trade.LimitOrder;
 import org.knowm.xchange.dto.trade.MarketOrder;
 import org.knowm.xchange.dto.trade.OpenOrders;
-import org.knowm.xchange.dto.trade.UserTrade;
 import org.knowm.xchange.dto.trade.UserTrades;
 import org.knowm.xchange.exceptions.ExchangeException;
 import org.knowm.xchange.exceptions.NotAvailableFromExchangeException;
-import org.knowm.xchange.poloniex.PoloniexAdapters;
-import org.knowm.xchange.poloniex.PoloniexErrorAdapter;
-import org.knowm.xchange.poloniex.PoloniexUtils;
 import org.knowm.xchange.poloniex.dto.PoloniexException;
-import org.knowm.xchange.poloniex.dto.trade.PoloniexLimitOrder;
-import org.knowm.xchange.poloniex.dto.trade.PoloniexOpenOrder;
-import org.knowm.xchange.poloniex.dto.trade.PoloniexTradeResponse;
-import org.knowm.xchange.poloniex.dto.trade.PoloniexUserTrade;
+import org.knowm.xchange.poloniex.PoloniexErrorAdapter;
 import org.knowm.xchange.service.trade.TradeService;
 import org.knowm.xchange.service.trade.params.CancelOrderByIdParams;
 import org.knowm.xchange.service.trade.params.CancelOrderParams;
 import org.knowm.xchange.service.trade.params.TradeHistoryParamCurrencyPair;
-import org.knowm.xchange.service.trade.params.TradeHistoryParamLimit;
 import org.knowm.xchange.service.trade.params.TradeHistoryParams;
 import org.knowm.xchange.service.trade.params.TradeHistoryParamsAll;
 import org.knowm.xchange.service.trade.params.TradeHistoryParamsTimeSpan;
@@ -36,13 +35,14 @@ import org.knowm.xchange.service.trade.params.orders.DefaultOpenOrdersParamCurre
 import org.knowm.xchange.service.trade.params.orders.OpenOrdersParamCurrencyPair;
 import org.knowm.xchange.service.trade.params.orders.OpenOrdersParams;
 import org.knowm.xchange.service.trade.params.orders.OrderQueryParams;
-import org.knowm.xchange.utils.DateUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class PoloniexTradeService extends PoloniexTradeServiceRaw implements TradeService {
 
   private static final Logger LOG = LoggerFactory.getLogger(PoloniexTradeService.class);
+  private static final HttpClient HTTP_CLIENT = HttpClient.newHttpClient();
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   private PoloniexMarketDataService poloniexMarketDataService;
 
@@ -60,23 +60,69 @@ public class PoloniexTradeService extends PoloniexTradeServiceRaw implements Tra
 
   @Override
   public OpenOrders getOpenOrders(OpenOrdersParams params) throws ExchangeException, IOException {
+    String key = exchange.getExchangeSpecification().getApiKey();
+    String secret = exchange.getExchangeSpecification().getSecretKey();
+
+    if (key == null || secret == null || key.isEmpty() || secret.isEmpty() || "api-key".equals(key)) {
+      throw new IOException("Invalid or missing Poloniex API credentials");
+    }
+
     try {
       CurrencyPair currencyPair = null;
       if (params instanceof OpenOrdersParamCurrencyPair) {
         currencyPair = ((OpenOrdersParamCurrencyPair) params).getCurrencyPair();
       }
 
-      final Map<String, PoloniexOpenOrder[]> poloniexOpenOrders;
-      if (currencyPair == null) {
-        poloniexOpenOrders = returnOpenOrders();
-      } else {
-        final PoloniexOpenOrder[] cpOpenOrders = returnOpenOrders(currencyPair);
-        poloniexOpenOrders = new HashMap<>(1);
-        poloniexOpenOrders.put(PoloniexUtils.toPairString(currencyPair), cpOpenOrders);
+      String path = "/orders";
+      String query = "";
+      if (currencyPair != null) {
+        String sym = currencyPair.getBase().getCurrencyCode().toUpperCase() + "_" + currencyPair.getCounter().getCurrencyCode().toUpperCase();
+        query = "symbol=" + sym;
       }
-      return PoloniexAdapters.adaptPoloniexOpenOrders(poloniexOpenOrders);
-    } catch (PoloniexException e) {
-      throw PoloniexErrorAdapter.adapt(e);
+
+      long timestamp = System.currentTimeMillis();
+      String paramString = (query.isEmpty() ? "" : query + "&") + "signTimestamp=" + timestamp;
+      String signatureString = "GET\n" + path + "\n" + paramString;
+      String signature = generateSignature(signatureString, secret);
+
+      String url = "https://api.poloniex.com" + path + "?" + paramString;
+
+      HttpRequest request = HttpRequest.newBuilder()
+          .uri(URI.create(url))
+          .GET()
+          .header("key", key)
+          .header("signTimestamp", String.valueOf(timestamp))
+          .header("signature", signature)
+          .header("signatureMethod", "HmacSHA256")
+          .header("signatureVersion", "2")
+          .build();
+
+      HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() != 200) {
+        throw new IOException("Failed to fetch Poloniex open orders, status code: " + response.statusCode() + ", body: " + response.body());
+      }
+
+      JsonNode root = OBJECT_MAPPER.readTree(response.body());
+      List<LimitOrder> openOrdersList = new ArrayList<>();
+      if (root.isArray()) {
+        for (JsonNode orderNode : root) {
+          String id = orderNode.get("id").asText();
+          String symbol = orderNode.get("symbol").asText();
+          String[] parts = symbol.split("_");
+          CurrencyPair pair = new CurrencyPair(parts[0], parts[1]);
+          OrderType type = "BUY".equals(orderNode.get("side").asText()) ? OrderType.BID : OrderType.ASK;
+          BigDecimal price = new BigDecimal(orderNode.get("price").asText());
+          BigDecimal originalAmount = new BigDecimal(orderNode.get("quantity").asText());
+          Date date = new Date(orderNode.get("createTime").asLong());
+          openOrdersList.add(new LimitOrder(type, originalAmount, pair, id, date, price));
+        }
+      }
+      return new OpenOrders(openOrdersList);
+    } catch (Exception e) {
+      if (e instanceof IOException) {
+        throw (IOException) e;
+      }
+      throw new IOException("Failed to get open orders from Poloniex", e);
     }
   }
 
@@ -87,37 +133,103 @@ public class PoloniexTradeService extends PoloniexTradeServiceRaw implements Tra
 
   @Override
   public String placeLimitOrder(LimitOrder limitOrder) throws IOException {
+    String key = exchange.getExchangeSpecification().getApiKey();
+    String secret = exchange.getExchangeSpecification().getSecretKey();
+
+    if (key == null || secret == null || key.isEmpty() || secret.isEmpty() || "api-key".equals(key)) {
+      throw new IOException("Invalid or missing Poloniex API credentials");
+    }
 
     try {
-      PoloniexTradeResponse response;
-      if (limitOrder.getType() == OrderType.BID || limitOrder.getType() == OrderType.EXIT_ASK) {
-        response = buy(limitOrder);
-      } else {
-        response = sell(limitOrder);
+      String symbol = limitOrder.getInstrument().getBase().getCurrencyCode().toUpperCase() + "_" +
+                     limitOrder.getInstrument().getCounter().getCurrencyCode().toUpperCase();
+      String side = (limitOrder.getType() == OrderType.BID || limitOrder.getType() == OrderType.EXIT_ASK) ? "BUY" : "SELL";
+      String quantity = limitOrder.getOriginalAmount().toPlainString();
+      String price = limitOrder.getLimitPrice().toPlainString();
+
+      String jsonBody = String.format(
+          "{\"symbol\":\"%s\",\"side\":\"%s\",\"type\":\"LIMIT\",\"quantity\":\"%s\",\"price\":\"%s\"}",
+          symbol, side, quantity, price
+      );
+
+      long timestamp = System.currentTimeMillis();
+      String encodedBody = java.net.URLEncoder.encode(jsonBody, StandardCharsets.UTF_8.name());
+      String paramString = "requestBody=" + encodedBody + "&signTimestamp=" + timestamp;
+      String signatureString = "POST\n/orders\n" + paramString;
+      String signature = generateSignature(signatureString, secret);
+
+      HttpRequest request = HttpRequest.newBuilder()
+          .uri(URI.create("https://api.poloniex.com/orders"))
+          .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+          .header("Content-Type", "application/json")
+          .header("key", key)
+          .header("signTimestamp", String.valueOf(timestamp))
+          .header("signature", signature)
+          .header("signatureMethod", "HmacSHA256")
+          .header("signatureVersion", "2")
+          .build();
+
+      HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() != 200) {
+        throw new IOException("Failed to place Poloniex limit order, status code: " + response.statusCode() + ", body: " + response.body());
       }
 
-      // The return value contains details of any trades that have been immediately executed as a
-      // result
-      // of this order. Make these available to the application if it has provided a
-      // PoloniexLimitOrder.
-      if (limitOrder instanceof PoloniexLimitOrder) {
-        PoloniexLimitOrder raw = (PoloniexLimitOrder) limitOrder;
-        raw.setResponse(response);
+      JsonNode root = OBJECT_MAPPER.readTree(response.body());
+      return root.get("id").asText();
+    } catch (Exception e) {
+      if (e instanceof IOException) {
+        throw (IOException) e;
       }
+      throw new IOException("Failed to place limit order", e);
+    }
+  }
 
-      return response.getOrderNumber().toString();
-    } catch (PoloniexException e) {
-      throw PoloniexErrorAdapter.adapt(e);
+  private String generateSignature(String data, String secret) {
+    try {
+      Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
+      SecretKeySpec secret_key = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+      sha256_HMAC.init(secret_key);
+      byte[] hash = sha256_HMAC.doFinal(data.getBytes(StandardCharsets.UTF_8));
+      return Base64.getEncoder().encodeToString(hash);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to generate signature", e);
     }
   }
 
   @Override
   public boolean cancelOrder(String orderId) throws IOException {
+    String key = exchange.getExchangeSpecification().getApiKey();
+    String secret = exchange.getExchangeSpecification().getSecretKey();
+
+    if (key == null || secret == null || key.isEmpty() || secret.isEmpty() || "api-key".equals(key)) {
+      throw new IOException("Invalid or missing Poloniex API credentials");
+    }
 
     try {
-      return cancel(orderId);
-    } catch (PoloniexException e) {
-      throw PoloniexErrorAdapter.adapt(e);
+      long timestamp = System.currentTimeMillis();
+      String signatureString = "DELETE\n/orders/" + orderId + "\nsignTimestamp=" + timestamp;
+      String signature = generateSignature(signatureString, secret);
+
+      HttpRequest request = HttpRequest.newBuilder()
+          .uri(URI.create("https://api.poloniex.com/orders/" + orderId + "?signTimestamp=" + timestamp))
+          .DELETE()
+          .header("key", key)
+          .header("signTimestamp", String.valueOf(timestamp))
+          .header("signature", signature)
+          .header("signatureMethod", "HmacSHA256")
+          .header("signatureVersion", "2")
+          .build();
+
+      HttpResponse<String> response = HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
+      if (response.statusCode() != 200) {
+        throw new IOException("Failed to cancel Poloniex order, status code: " + response.statusCode() + ", body: " + response.body());
+      }
+      return true;
+    } catch (Exception e) {
+      if (e instanceof IOException) {
+        throw (IOException) e;
+      }
+      throw new IOException("Failed to cancel order", e);
     }
   }
 
@@ -134,99 +246,13 @@ public class PoloniexTradeService extends PoloniexTradeServiceRaw implements Tra
     }
   }
 
-  /**
-   * @param params Can optionally implement {@link TradeHistoryParamCurrencyPair} and {@link
-   *     TradeHistoryParamsTimeSpan}. All other TradeHistoryParams types will be ignored.
-   */
   @Override
   public UserTrades getTradeHistory(TradeHistoryParams params) throws IOException {
-    try {
-      CurrencyPair currencyPair = null;
-      Date startTime = null;
-      Date endTime = null;
-
-      if (params instanceof TradeHistoryParamCurrencyPair) {
-        currencyPair = ((TradeHistoryParamCurrencyPair) params).getCurrencyPair();
-      }
-      if (params instanceof TradeHistoryParamsTimeSpan) {
-        startTime = ((TradeHistoryParamsTimeSpan) params).getStartTime();
-        endTime = ((TradeHistoryParamsTimeSpan) params).getEndTime();
-      }
-
-      Integer limit = 500;
-      if (params instanceof TradeHistoryParamLimit) {
-        TradeHistoryParamLimit tradeHistoryParamLimit = (TradeHistoryParamLimit) params;
-        limit = tradeHistoryParamLimit.getLimit();
-      }
-
-      return getTradeHistory(
-          currencyPair,
-          DateUtils.toUnixTimeNullSafe(startTime),
-          DateUtils.toUnixTimeNullSafe(endTime),
-          limit);
-    } catch (PoloniexException e) {
-      throw PoloniexErrorAdapter.adapt(e);
-    }
+    throw new NotAvailableFromExchangeException();
   }
 
-  public BigDecimal getMakerFee() throws IOException {
-    try {
-      String value = getFeeInfo().get("makerFee");
-      return new BigDecimal(value);
-    } catch (PoloniexException e) {
-      throw PoloniexErrorAdapter.adapt(e);
-    }
-  }
-
-  public BigDecimal getTakerFee() throws IOException {
-    try {
-      String value = getFeeInfo().get("takerFee");
-      return new BigDecimal(value);
-    } catch (PoloniexException e) {
-      throw PoloniexErrorAdapter.adapt(e);
-    }
-  }
-
-  private UserTrades getTradeHistory(
-      CurrencyPair currencyPair, final Long startTime, final Long endTime, Integer limit)
-      throws IOException {
-
-    try {
-      List<UserTrade> trades = new ArrayList<>();
-      if (currencyPair == null) {
-        HashMap<String, PoloniexUserTrade[]> poloniexUserTrades =
-            returnTradeHistory(startTime, endTime, limit);
-        if (poloniexUserTrades != null) {
-          for (Map.Entry<String, PoloniexUserTrade[]> mapEntry : poloniexUserTrades.entrySet()) {
-            currencyPair = PoloniexUtils.toCurrencyPair(mapEntry.getKey());
-            for (PoloniexUserTrade poloniexUserTrade : mapEntry.getValue()) {
-              trades.add(PoloniexAdapters.adaptPoloniexUserTrade(poloniexUserTrade, currencyPair));
-            }
-          }
-        }
-      } else {
-        PoloniexUserTrade[] poloniexUserTrades =
-            returnTradeHistory(currencyPair, startTime, endTime, limit);
-        if (poloniexUserTrades != null) {
-          for (PoloniexUserTrade poloniexUserTrade : poloniexUserTrades) {
-            trades.add(PoloniexAdapters.adaptPoloniexUserTrade(poloniexUserTrade, currencyPair));
-          }
-        }
-      }
-
-      return new UserTrades(trades, TradeSortType.SortByTimestamp);
-    } catch (PoloniexException e) {
-      throw PoloniexErrorAdapter.adapt(e);
-    }
-  }
-
-  /**
-   * Create {@link TradeHistoryParams} that supports {@link TradeHistoryParamsTimeSpan} and {@link
-   * TradeHistoryParamCurrencyPair}.
-   */
   @Override
   public TradeHistoryParams createTradeHistoryParams() {
-
     return new PoloniexTradeHistoryParams();
   }
 
@@ -235,60 +261,9 @@ public class PoloniexTradeService extends PoloniexTradeServiceRaw implements Tra
     return new DefaultOpenOrdersParamCurrencyPair();
   }
 
-  public Collection<Order> getOrderImpl(String... orderIds) throws IOException {
-
-    List<String> orderIdList = Arrays.asList(orderIds);
-
-    OpenOrders openOrders = getOpenOrders();
-    List<Order> returnValue =
-        openOrders.getOpenOrders().stream()
-            .filter(f -> orderIdList.contains(f.getId()))
-            .collect(Collectors.toList());
-
-    returnValue.addAll(
-        orderIdList.stream()
-            .filter(f -> returnValue.stream().noneMatch(a -> a.getId().equals(f)))
-            .map(
-                f -> {
-                  try {
-                    return PoloniexAdapters.adaptUserTradesToOrderStatus(f, returnOrderTrades(f));
-                  } catch (IOException e) {
-                    LOG.error("Unable to find status for Poloniex order id: " + f, e);
-                  }
-                  return null;
-                })
-            .filter(Objects::nonNull)
-            .collect(Collectors.toList()));
-
-    return returnValue;
-  }
-
   @Override
   public Collection<Order> getOrder(OrderQueryParams... orderQueryParams) throws IOException {
-    return getOrderImpl(TradeService.toOrderIds(orderQueryParams));
-  }
-
-  public final UserTrades getOrderTrades(Order order) throws IOException {
-    return getOrderTrades(order.getId(), order.getCurrencyPair());
-  }
-
-  public UserTrades getOrderTrades(String orderId, CurrencyPair currencyPair) throws IOException {
-
-    try {
-      List<UserTrade> trades = new ArrayList<>();
-
-      PoloniexUserTrade[] poloniexUserTrades = returnOrderTrades(orderId);
-      if (poloniexUserTrades != null) {
-        for (PoloniexUserTrade poloniexUserTrade : poloniexUserTrades) {
-          poloniexUserTrade.setOrderNumber(orderId); // returnOrderTrades doesn't fill in orderId
-          trades.add(PoloniexAdapters.adaptPoloniexUserTrade(poloniexUserTrade, currencyPair));
-        }
-      }
-
-      return new UserTrades(trades, TradeSortType.SortByTimestamp);
-    } catch (PoloniexException e) {
-      throw PoloniexErrorAdapter.adapt(e);
-    }
+    throw new NotAvailableFromExchangeException();
   }
 
   public static class PoloniexTradeHistoryParams

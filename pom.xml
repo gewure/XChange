@@ -85,8 +85,6 @@
         <module>xchange-independentreserve</module>
         <module>xchange-itbit</module>
         <module>xchange-kalshi</module>
-        <module>xchange-koineks</module>
-        <module>xchange-koinim</module>
         <module>xchange-kraken</module>
         <module>xchange-krakenfutures</module>
         <module>xchange-kucoin</module>
@@ -307,6 +305,12 @@
             <dependency>
                 <groupId>org.bouncycastle</groupId>
                 <artifactId>bcprov-jdk18on</artifactId>
+                <version>${version.bouncycastle}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.bouncycastle</groupId>
+                <artifactId>bcutil-jdk18on</artifactId>
                 <version>${version.bouncycastle}</version>
             </dependency>
 

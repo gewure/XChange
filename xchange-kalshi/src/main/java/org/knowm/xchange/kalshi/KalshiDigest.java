@@ -14,10 +14,18 @@ import si.mazi.rescu.RestInvocation;
 import jakarta.ws.rs.HeaderParam;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import java.security.Security;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.net.URI;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 
 public class KalshiDigest extends BaseParamsDigest {
 
     private final PrivateKey privateKey;
+    private long clockOffsetMs = 0;
 
     static {
         if (Security.getProvider(BouncyCastleProvider.PROVIDER_NAME) == null) {
@@ -26,7 +34,8 @@ public class KalshiDigest extends BaseParamsDigest {
     }
 
     private KalshiDigest(String privateKeyPem) {
-        super(privateKeyPem, "RSA");
+        super("dummykey", "HmacSHA256");
+        calibrateClockOffset();
         try {
             // Remove PEM headers, footers, and newlines. Try to be robust for different formats
             String privateKeyContent = privateKeyPem
@@ -35,10 +44,25 @@ public class KalshiDigest extends BaseParamsDigest {
                     .replaceAll("\\s+", "");
 
             byte[] keyBytes = Base64.getDecoder().decode(privateKeyContent);
-            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyBytes);
-            // Use BouncyCastle provider to ensure support for both standard and alternative formats
+            
             KeyFactory kf = KeyFactory.getInstance("RSA", "BC");
-            this.privateKey = kf.generatePrivate(spec);
+            if (privateKeyPem.contains("RSA PRIVATE KEY")) {
+                org.bouncycastle.asn1.pkcs.RSAPrivateKey rsaPrivKey = org.bouncycastle.asn1.pkcs.RSAPrivateKey.getInstance(keyBytes);
+                java.security.spec.RSAPrivateCrtKeySpec keySpec = new java.security.spec.RSAPrivateCrtKeySpec(
+                    rsaPrivKey.getModulus(),
+                    rsaPrivKey.getPublicExponent(),
+                    rsaPrivKey.getPrivateExponent(),
+                    rsaPrivKey.getPrime1(),
+                    rsaPrivKey.getPrime2(),
+                    rsaPrivKey.getExponent1(),
+                    rsaPrivKey.getExponent2(),
+                    rsaPrivKey.getCoefficient()
+                );
+                this.privateKey = kf.generatePrivate(keySpec);
+            } else {
+                PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyBytes);
+                this.privateKey = kf.generatePrivate(spec);
+            }
         } catch (Exception e) {
             throw new ExchangeSecurityException("Cannot parse Kalshi private key", e);
         }
@@ -72,6 +96,39 @@ public class KalshiDigest extends BaseParamsDigest {
         } catch (Exception e) {
             throw new ExchangeSecurityException("Cannot sign Kalshi request", e);
         }
+    }
+
+    private void calibrateClockOffset() {
+        if ("true".equalsIgnoreCase(System.getProperty("kalshi.skip.clock.calibration"))) {
+            System.out.println("Skipping Kalshi clock offset calibration (skip system property set)");
+            return;
+        }
+        try {
+            HttpClient client = HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(5))
+                    .build();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://external-api.kalshi.com/trade-api/v2/markets"))
+                    .method("HEAD", HttpRequest.BodyPublishers.noBody())
+                    .build();
+            HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
+            Optional<String> dateHeader = response.headers().firstValue("date");
+            if (dateHeader.isPresent()) {
+                ZonedDateTime serverTime = ZonedDateTime.parse(dateHeader.get(), DateTimeFormatter.RFC_1123_DATE_TIME);
+                this.clockOffsetMs = serverTime.toInstant().toEpochMilli() - System.currentTimeMillis();
+                System.out.println("Kalshi Clock Offset auto-calibrated: " + this.clockOffsetMs + " ms");
+            }
+        } catch (Exception e) {
+            System.err.println("Kalshi clock offset calibration failed: " + e.getMessage());
+        }
+    }
+
+    public long getClockOffsetMs() {
+        return clockOffsetMs;
+    }
+
+    public static String getCalibratedTimestamp(KalshiDigest digest) {
+        return String.valueOf(System.currentTimeMillis() + (digest != null ? digest.getClockOffsetMs() : 0));
     }
 
     @Override

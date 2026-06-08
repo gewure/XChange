@@ -57,7 +57,7 @@ public class KalshiMarketDataService implements MarketDataService {
         KalshiDigest signatureCreator = exchange.getSignatureCreator();
 
         if (apiKey != null && signatureCreator != null) {
-            String timestamp = String.valueOf(System.currentTimeMillis());
+            String timestamp = KalshiDigest.getCalibratedTimestamp(signatureCreator);
             String pathForSignature = "/trade-api/v2" + path;
             String signature = signatureCreator.sign(timestamp, "GET", pathForSignature);
 

@@ -24,11 +24,20 @@ public class KalshiStreamingService extends JsonNettyStreamingService {
         this.signatureCreator = signatureCreator;
     }
 
+    private final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(this.getClass());
+
+
+    @Override
+    public void messageHandler(String message) {
+        logger.info("Kalshi WS message: {}", message);
+        super.messageHandler(message);
+    }
+
     @Override
     protected DefaultHttpHeaders getCustomHeaders() {
         DefaultHttpHeaders headers = super.getCustomHeaders();
         if (apiKey != null && signatureCreator != null) {
-             String timestamp = String.valueOf(System.currentTimeMillis());
+             String timestamp = KalshiDigest.getCalibratedTimestamp(signatureCreator);
              // For websockets, Kalshi specifies signing just the timestamp + method ("GET") + path ("/trade-api/ws/v2")
              String pathForSignature = "/trade-api/ws/v2";
              String signature = signatureCreator.sign(timestamp, "GET", pathForSignature);
@@ -36,6 +45,8 @@ public class KalshiStreamingService extends JsonNettyStreamingService {
              headers.add("KALSHI-ACCESS-KEY", apiKey);
              headers.add("KALSHI-ACCESS-SIGNATURE", signature);
              headers.add("KALSHI-ACCESS-TIMESTAMP", timestamp);
+             headers.add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+             headers.add("Origin", "https://kalshi.com");
         } else {
              throw new ExchangeSecurityException("Kalshi API requires authentication (apiKey and secretKey)");
         }
@@ -84,6 +95,11 @@ public class KalshiStreamingService extends JsonNettyStreamingService {
         return null;
     }
 
+    @Override
+    public String getSubscriptionUniqueId(String channelName, Object... args) {
+        return channelName;
+    }
+
     // Internal classes for JSON serialization
     private static class KalshiSubscribeMessage {
         public int id;
@@ -105,5 +121,10 @@ public class KalshiStreamingService extends JsonNettyStreamingService {
             this.channels = channels;
             this.market_ticker = market_ticker;
         }
+    }
+
+    @Override
+    protected WebSocketClientExtensionHandler getWebSocketClientExtensionHandler() {
+        return null;
     }
 }

@@ -50,7 +50,7 @@ public class KalshiStreamingExchange extends KalshiExchange implements Streaming
     @Override
     public ExchangeSpecification getDefaultExchangeSpecification() {
         ExchangeSpecification spec = super.getDefaultExchangeSpecification();
-        spec.setExchangeSpecificParametersItem("streaming_uri", "wss://external-api.kalshi.com/trade-api/ws/v2");
+        spec.setExchangeSpecificParametersItem("streaming_uri", "wss://external-api-ws.kalshi.com/trade-api/ws/v2");
         return spec;
     }
 }

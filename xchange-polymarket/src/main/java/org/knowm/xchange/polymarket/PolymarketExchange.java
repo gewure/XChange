@@ -4,11 +4,16 @@ import org.knowm.xchange.BaseExchange;
 import org.knowm.xchange.Exchange;
 import org.knowm.xchange.ExchangeSpecification;
 
+import si.mazi.rescu.RestProxyFactory;
+
 public class PolymarketExchange extends BaseExchange implements Exchange {
 
   @Override
   protected void initServices() {
       this.marketDataService = new PolymarketMarketDataService(this);
+      this.accountService = new PolymarketAccountService(this);
+      Polymarket polymarket = RestProxyFactory.createProxy(Polymarket.class, exchangeSpecification.getSslUri());
+      this.tradeService = new PolymarketTradeService(this, polymarket);
   }
 
   @Override

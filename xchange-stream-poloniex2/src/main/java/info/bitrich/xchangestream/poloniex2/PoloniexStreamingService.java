@@ -1,17 +1,11 @@
 package info.bitrich.xchangestream.poloniex2;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import info.bitrich.xchangestream.poloniex2.dto.PoloniexWebSocketEvent;
-import info.bitrich.xchangestream.poloniex2.dto.PoloniexWebSocketEventsTransaction;
-import info.bitrich.xchangestream.poloniex2.dto.PoloniexWebSocketOrderbookModifiedEvent;
-import info.bitrich.xchangestream.poloniex2.dto.PoloniexWebSocketSubscriptionMessage;
 import info.bitrich.xchangestream.service.netty.JsonNettyStreamingService;
 import io.reactivex.rxjava3.core.Observable;
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import org.knowm.xchange.currency.CurrencyPair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,54 +13,34 @@ import org.slf4j.LoggerFactory;
 public class PoloniexStreamingService extends JsonNettyStreamingService {
   private static final Logger LOG = LoggerFactory.getLogger(PoloniexStreamingService.class);
 
-  private static final String HEARTBEAT = "1010";
-
-  private final Map<String, String> subscribedChannels = new ConcurrentHashMap<>();
   private final Map<String, Observable<JsonNode>> subscriptions = new ConcurrentHashMap<>();
 
   public PoloniexStreamingService(String apiUrl) {
-    super(apiUrl, Integer.MAX_VALUE, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_RETRY_DURATION, 2);
+    // Set idle timeout to 20 seconds
+    super(apiUrl, Integer.MAX_VALUE, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_RETRY_DURATION, 20);
   }
 
   @Override
   protected void handleMessage(JsonNode message) {
-
-    if (message.isArray()) {
-      if (message.size() < 3) {
-        if (message.get(0).asText().equals(HEARTBEAT)) return;
-        else if ("1002".equals(message.get(0).asText())) return;
-      }
-      int channelId = Integer.parseInt(message.get(0).toString());
-      if (channelId > 0 && channelId < 1000) {
-        JsonNode events = message.get(2);
-        if (events != null && events.isArray()) {
-          JsonNode event = events.get(0);
-          if (event.get(0).toString().equals("\"i\"")) {
-            if (event.get(1).has("orderBook")) {
-              subscribedChannels.compute(
-                  String.valueOf(channelId),
-                  (key, oldValue) -> {
-                    String currencyPair = event.get(1).get("currencyPair").asText();
-                    if (oldValue != null && !oldValue.equals(currencyPair)) {
-                      throw new RuntimeException("Attempted currency pair channel id reassignment");
-                    }
-                    if (oldValue == null) {
-                      LOG.info("Register {} as {}", channelId, currencyPair);
-                    } else {
-                      LOG.debug("Order book reinitialization {} {}", channelId, currencyPair);
-                    }
-                    return currencyPair;
-                  });
-            }
-          }
-        }
-      }
+    if (message.has("event") && "subscribe".equals(message.get("event").asText())) {
+      LOG.info("Poloniex WS Subscribed: {}", message);
+      return;
     }
-    if (message.has("error")) {
-      LOG.error("Error with message: " + message.get("error").asText());
+    if (message.has("event") && "unsubscribe".equals(message.get("event").asText())) {
+      LOG.info("Poloniex WS Unsubscribed: {}", message);
+      return;
+    }
+    if (message.has("event") && "pong".equals(message.get("event").asText())) {
+      LOG.debug("Poloniex WS Pong received");
       return;
     }
     super.handleMessage(message);
+  }
+
+  @Override
+  protected void handleIdle(io.netty.channel.ChannelHandlerContext ctx) {
+    LOG.debug("Sending Poloniex WS Ping...");
+    ctx.writeAndFlush(new io.netty.handler.codec.http.websocketx.TextWebSocketFrame("{\"event\":\"ping\"}"));
   }
 
   @Override
@@ -82,55 +56,41 @@ public class PoloniexStreamingService extends JsonNettyStreamingService {
     return subscriptions.get(channelName);
   }
 
-  public Observable<List<PoloniexWebSocketEvent>> subscribeCurrencyPairChannel(
-      CurrencyPair currencyPair) {
-    String channelName =
-        currencyPair.getCounter().toString() + "_" + currencyPair.getBase().toString();
-    return subscribeChannel(channelName)
-        .map(
-            jsonNode ->
-                objectMapper.treeToValue(jsonNode, PoloniexWebSocketEventsTransaction.class))
-        .scan(
-            (poloniexWebSocketEventsTransactionOld, poloniexWebSocketEventsTransactionNew) -> {
-              final boolean initialSnapshot =
-                  poloniexWebSocketEventsTransactionNew.getEvents().stream()
-                      .anyMatch(PoloniexWebSocketOrderbookModifiedEvent.class::isInstance);
-              final boolean sequenceContinuous =
-                  poloniexWebSocketEventsTransactionOld.getSeqId() + 1
-                      == poloniexWebSocketEventsTransactionNew.getSeqId();
-              if (!initialSnapshot || sequenceContinuous) {
-                return poloniexWebSocketEventsTransactionNew;
-              } else {
-                throw new RuntimeException(
-                    String.format(
-                        "Invalid sequencing, old: %s new: %s",
-                        objectMapper.writeValueAsString(poloniexWebSocketEventsTransactionOld),
-                        objectMapper.writeValueAsString(poloniexWebSocketEventsTransactionNew)));
-              }
-            })
-        .map(PoloniexWebSocketEventsTransaction::getEvents)
-        .share();
-  }
-
   @Override
   protected String getChannelNameFromMessage(JsonNode message) {
-    String strChannelId = message.get(0).asText();
-    int channelId = Integer.parseInt(strChannelId);
-    if (channelId >= 1000) return strChannelId;
-    else return subscribedChannels.get(message.get(0).asText());
+    if (message.has("channel") && message.has("symbol")) {
+      return message.get("channel").asText() + ":" + message.get("symbol").asText().toUpperCase();
+    }
+    if (message.has("channel") && message.has("data") && message.get("data").isArray() && message.get("data").size() > 0) {
+      JsonNode data0 = message.get("data").get(0);
+      if (data0.has("symbol")) {
+        return message.get("channel").asText() + ":" + data0.get("symbol").asText().toUpperCase();
+      }
+    }
+    return "";
   }
 
   @Override
   public String getSubscribeMessage(String channelName, Object... args) throws IOException {
-    PoloniexWebSocketSubscriptionMessage subscribeMessage =
-        new PoloniexWebSocketSubscriptionMessage("subscribe", channelName);
-    return objectMapper.writeValueAsString(subscribeMessage);
+    String channel = "book";
+    String symbol = "BTC_USDT";
+    if (channelName.contains(":")) {
+      String[] parts = channelName.split(":");
+      channel = parts[0];
+      symbol = parts[1];
+    }
+    return String.format("{\"event\":\"subscribe\",\"channel\":[\"%s\"],\"symbols\":[\"%s\"]}", channel, symbol.toLowerCase());
   }
 
   @Override
   public String getUnsubscribeMessage(String channelName, Object... args) throws IOException {
-    PoloniexWebSocketSubscriptionMessage subscribeMessage =
-        new PoloniexWebSocketSubscriptionMessage("unsubscribe", channelName);
-    return objectMapper.writeValueAsString(subscribeMessage);
+    String channel = "book";
+    String symbol = "BTC_USDT";
+    if (channelName.contains(":")) {
+      String[] parts = channelName.split(":");
+      channel = parts[0];
+      symbol = parts[1];
+    }
+    return String.format("{\"event\":\"unsubscribe\",\"channel\":[\"%s\"],\"symbols\":[\"%s\"]}", channel, symbol.toLowerCase());
   }
 }

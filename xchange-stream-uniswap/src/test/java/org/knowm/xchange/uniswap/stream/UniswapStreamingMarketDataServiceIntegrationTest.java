@@ -57,4 +57,44 @@ public class UniswapStreamingMarketDataServiceIntegrationTest {
         System.out.println("Stream initialized successfully, but no trade occurred in the last 10 seconds.");
     }
   }
+
+  @Test
+  public void testLiveMainnetUstcUsdcStream() throws Exception {
+    UniswapStreamingExchange exchange = new UniswapStreamingExchange();
+    org.knowm.xchange.ExchangeSpecification spec = exchange.getDefaultExchangeSpecification();
+    spec.setExchangeSpecificParametersItem("RpcUri", "https://ethereum-rpc.publicnode.com");
+    spec.setExchangeSpecificParametersItem("streaming_uri", "wss://ethereum-rpc.publicnode.com");
+    exchange.applySpecification(spec);
+    exchange.remoteInit();
+
+    org.knowm.xchange.instrument.Instrument instrument = new org.knowm.xchange.currency.CurrencyPair(
+        new Currency("wUSTC"),
+        new Currency("USDC")
+    );
+
+    Ticker ticker = exchange.getMarketDataService().getTicker(instrument);
+    assertThat(ticker).isNotNull();
+    assertThat(ticker.getLast()).isGreaterThan(BigDecimal.ZERO);
+    System.out.println("Live Uniswap wUSTC/USDC Ticker Price: " + ticker.getLast());
+
+    exchange.connect().blockingAwait();
+    assertThat(exchange.isAlive()).isTrue();
+
+    CountDownLatch latch = new CountDownLatch(1);
+    io.reactivex.rxjava3.disposables.Disposable sub = exchange.getStreamingMarketDataService()
+        .getTrades(instrument)
+        .subscribe(trade -> {
+            System.out.println("Live Uniswap wUSTC/USDC Trade Event: " + trade);
+            latch.countDown();
+        }, err -> {
+            System.err.println("Stream error: " + err.getMessage());
+        });
+
+    boolean received = latch.await(15, TimeUnit.SECONDS);
+    sub.dispose();
+    exchange.disconnect().blockingAwait();
+
+    assertThat(received).isTrue();
+    System.out.println("Successfully verified wUSTC/USDC Uniswap route is streaming/polling updates!");
+  }
 }
