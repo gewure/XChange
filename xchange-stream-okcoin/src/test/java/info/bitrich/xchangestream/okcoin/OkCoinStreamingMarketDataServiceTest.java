@@ -16,6 +16,7 @@ import org.junit.Test;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.knowm.xchange.dto.Order;
 import org.knowm.xchange.dto.marketdata.OrderBook;
+import org.knowm.xchange.dto.marketdata.Ticker;
 import org.knowm.xchange.dto.trade.LimitOrder;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -94,5 +95,40 @@ public class OkCoinStreamingMarketDataServiceTest {
 
     // Get order book object in correct order
     test.assertResult(expected);
+  }
+
+  @Test
+  public void testGetTickerWithCommas() throws Exception {
+    // Given ticker in JSON with commas in numbers
+    String jsonString =
+        "{"
+            + "\"channel\": \"ok_sub_spot_btc_usd_ticker\","
+            + "\"data\": {"
+            + "\"high\": \"1,625.23\","
+            + "\"low\": \"1,600.00\","
+            + "\"buy\": \"1,610.50\","
+            + "\"sell\": \"1,612.00\","
+            + "\"last\": \"1,611.25\","
+            + "\"vol\": \"1,000.50\","
+            + "\"dayLow\": \"1600.00\","
+            + "\"dayHigh\": \"1625.23\","
+            + "\"timestamp\": 1484602135246"
+            + "}"
+            + "}";
+
+    ObjectMapper objectMapper = new ObjectMapper();
+    JsonNode jsonNode = objectMapper.readTree(jsonString);
+
+    when(okCoinStreamingService.subscribeChannel(any())).thenReturn(Observable.just(jsonNode));
+
+    // Call get ticker observable
+    TestObserver<Ticker> test = marketDataService.getTicker(CurrencyPair.BTC_USD).test();
+
+    // The test should fail here if parsing is not handled correctly
+    test.assertNoErrors();
+    test.assertValue(
+        ticker ->
+            ticker.getHigh().compareTo(new BigDecimal("1625.23")) == 0
+                && ticker.getLast().compareTo(new BigDecimal("1611.25")) == 0);
   }
 }

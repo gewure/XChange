@@ -1,12 +1,18 @@
 package info.bitrich.xchangestream.okcoin;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import info.bitrich.xchangestream.core.StreamingMarketDataService;
 import info.bitrich.xchangestream.okcoin.dto.OkCoinOrderbook;
 import info.bitrich.xchangestream.okcoin.dto.OkCoinWebSocketTrade;
 import info.bitrich.xchangestream.okcoin.dto.marketdata.FutureTicker;
 import info.bitrich.xchangestream.service.netty.StreamingObjectMapperHelper;
 import io.reactivex.rxjava3.core.Observable;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.Map;
@@ -32,11 +38,31 @@ import org.knowm.xchange.okcoin.dto.marketdata.OkCoinTickerResponse;
 public class OkCoinStreamingMarketDataService implements StreamingMarketDataService {
   private final OkCoinStreamingService service;
 
-  private final ObjectMapper mapper = StreamingObjectMapperHelper.getObjectMapper();
+  private final ObjectMapper mapper;
   private final Map<String, OkCoinOrderbook> orderbooks = new HashMap<>();
 
   OkCoinStreamingMarketDataService(OkCoinStreamingService service) {
     this.service = service;
+    this.mapper = StreamingObjectMapperHelper.getObjectMapper().copy();
+    SimpleModule module = new SimpleModule();
+    module.addDeserializer(
+        BigDecimal.class,
+        new JsonDeserializer<BigDecimal>() {
+          @Override
+          public BigDecimal deserialize(JsonParser p, DeserializationContext ctxt)
+              throws IOException, JsonProcessingException {
+            String value = p.getText();
+            if (value == null) {
+              return null;
+            }
+            value = value.replace(",", "");
+            if (value.isEmpty()) {
+              return null;
+            }
+            return new BigDecimal(value);
+          }
+        });
+    this.mapper.registerModule(module);
   }
 
   /**
@@ -128,7 +154,6 @@ public class OkCoinStreamingMarketDataService implements StreamingMarketDataServ
         .subscribeChannel(channel)
         .map(
             s -> {
-              // TODO: fix parsing of BigDecimal attribute val that has format: 1,625.23
               OkCoinTicker okCoinTicker = mapper.treeToValue(s.get("data"), OkCoinTicker.class);
               return OkCoinAdapters.adaptTicker(
                   new OkCoinTickerResponse(okCoinTicker), currencyPair);
